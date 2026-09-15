@@ -663,9 +663,12 @@
 .collectible-active-grid article > div:last-child { display: grid; min-width: 0; gap: 2px; }
 .collectible-active-grid article strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .collectible-active-grid article span { color: var(--muted); font-size: 9px; }
+.collectible-scheduled { background: var(--warn-tint); border: 1px solid var(--warn-border); border-radius: var(--radius); box-shadow: var(--shadow-sm); }
+.collectible-scheduled > div { color: var(--warn); }
 .collectible-definition { overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm); }
 .collectible-definition-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; background: var(--panel-subtle); border-bottom: 1px solid var(--line); }
 .collectible-main-fields { padding: 14px 16px; background: var(--panel-subtle); border-bottom: 1px solid var(--line); }
+.collectible-publish-at em { display: block; margin-top: 4px; color: var(--muted); font-size: 9px; font-style: normal; line-height: 1.4; }
 .collectible-section { padding: 14px 16px; border-bottom: 1px solid var(--line); }
 .collectible-section:last-child { border-bottom: 0; }
 .collectible-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }

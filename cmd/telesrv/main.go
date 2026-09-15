@@ -1841,6 +1841,7 @@ func run(logger *zap.Logger) error {
 	go rpc.NewExpiryDispatcher(router, logger.Named("rpc").Named("expiry")).Run(ctx)
 	go rpc.NewPhoneExpiryDispatcher(router, logger.Named("rpc").Named("phone-expiry"), cfg.CallExpiryInterval).Run(ctx)
 	go rpc.NewGroupCallSweepDispatcher(router, logger.Named("rpc").Named("groupcall-sweep"), cfg.GroupCallSweepInterval, cfg.GroupCallCheckTTL).Run(ctx)
+	go rpc.NewCollectibleDropDispatcher(router, logger.Named("rpc").Named("collectible-drop"), cfg.CollectibleDropInterval).Run(ctx)
 	go router.RunChannelFanout(ctx)
 	go router.RunBotAPIEnqueue(ctx)
 	go router.RunPresenceLastSeenBatch(ctx)

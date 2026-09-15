@@ -344,6 +344,9 @@ type GiftsService interface {
 	CreateCollectibleRevision(ctx context.Context, write domain.StarGiftCollectibleWrite) (domain.StarGiftCollectibleRevision, error)
 	CollectiblePreview(ctx context.Context, giftID int64) (domain.StarGiftUpgradePreview, bool, error)
 	CollectibleAnimationJSON(ctx context.Context, giftID int64, kind domain.StarGiftCollectibleAttributeKind, attributeID int64) ([]byte, bool, error)
+	// PendingCollectible surfaces a not-yet-live scheduled collectible drop -- see
+	// internal/app/stargifts.Service.PendingCollectible.
+	PendingCollectible(ctx context.Context, giftID int64) (domain.StarGiftCollectibleRevision, bool, error)
 }
 
 type OfficialGiftsSource interface {
@@ -977,6 +980,10 @@ type PublishStarGiftCollectiblesRequest struct {
 	Models       []StarGiftCollectibleAnimationUpload `json:"models"`
 	Patterns     []StarGiftCollectibleAnimationUpload `json:"patterns"`
 	Backdrops    []StarGiftCollectibleBackdropInput   `json:"backdrops"`
+	// PublishAt is Unix seconds; zero or any already-past instant publishes
+	// immediately, same as before this field existed. A future instant
+	// authors a deferred drop instead -- see domain.StarGiftCollectibleWrite.
+	PublishAt int64 `json:"publish_at,omitempty"`
 }
 
 type SetAccountFrozenRequest struct {
@@ -4200,7 +4207,7 @@ func (s *Service) PublishStarGiftCollectibles(ctx context.Context, req PublishSt
 	write := domain.StarGiftCollectibleWrite{
 		GiftID: req.GiftID, UpgradeStars: req.UpgradeStars, SupplyTotal: req.SupplyTotal,
 		SlugPrefix: strings.ToLower(strings.TrimSpace(req.SlugPrefix)), Models: models, Patterns: patterns, Backdrops: backdrops,
-		Actor: req.Actor, CommandID: req.CommandID,
+		Actor: req.Actor, CommandID: req.CommandID, PublishAt: req.PublishAt,
 	}
 	if err := domain.ValidateStarGiftCollectibleDraft(write); err != nil {
 		return CommandResult{}, err
@@ -4219,6 +4226,7 @@ func (s *Service) PublishStarGiftCollectibles(ctx context.Context, req PublishSt
 			"supply_total": req.SupplyTotal,
 			"slug_prefix":  write.SlugPrefix, "models": collectibleUploadDetails(req.Models),
 			"patterns": collectibleUploadDetails(req.Patterns), "backdrops": len(req.Backdrops),
+			"publish_at": req.PublishAt,
 		}
 		if req.DryRun {
 			return CommandResult{Message: "star gift collectible pool validated", Details: details}, nil
@@ -4230,7 +4238,11 @@ func (s *Service) PublishStarGiftCollectibles(ctx context.Context, req PublishSt
 		details["revision_id"] = strconv.FormatInt(revision.ID, 10)
 		details["revision"] = revision.Revision
 		details["published"] = revision.Published
-		return CommandResult{Message: "star gift collectible pool published", Details: details}, nil
+		message := "star gift collectible pool published"
+		if !revision.Published {
+			message = "star gift collectible pool scheduled"
+		}
+		return CommandResult{Message: message, Details: details}, nil
 	})
 }
 
@@ -4736,6 +4748,15 @@ func safeAccountImageType(value string) bool {
 	default:
 		return false
 	}
+}
+
+// PendingStarGiftCollectible surfaces a gift's not-yet-live scheduled
+// collectible drop, if any, for the admin panel's status view.
+func (s *Service) PendingStarGiftCollectible(ctx context.Context, giftID int64) (domain.StarGiftCollectibleRevision, bool, error) {
+	if s == nil || s.gifts == nil || giftID <= 0 {
+		return domain.StarGiftCollectibleRevision{}, false, nil
+	}
+	return s.gifts.PendingCollectible(ctx, giftID)
 }
 
 func (s *Service) StarGiftCollectibles(ctx context.Context, giftID int64) (domain.StarGiftUpgradePreview, bool, error) {

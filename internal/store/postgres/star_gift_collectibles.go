@@ -64,13 +64,18 @@ SELECT COALESCE(MAX(revision), 0) + 1 FROM star_gift_collectible_revisions WHERE
 			return fmt.Errorf("allocate collectible revision: %w", err)
 		}
 		var revisionID int64
+		// scheduled_publish_at stores the operator's requested instant (if any);
+		// the activation decision itself is made below against the database's
+		// own clock, not the app server's, so a busy/skewed app host can never
+		// get it wrong.
 		if err := tx.QueryRow(ctx, `
 INSERT INTO star_gift_collectible_revisions
     (gift_id, revision, upgrade_stars, supply_total, slug_prefix, status, created_by, command_id,
-     official_gift_id, source_manifest_sha256)
-VALUES ($1,$2,$3,$4,$5,'draft',$6,$7,NULLIF($8::bigint,0),$9)
+     official_gift_id, source_manifest_sha256, scheduled_publish_at)
+VALUES ($1,$2,$3,$4,$5,'draft',$6,$7,NULLIF($8::bigint,0),$9,
+        CASE WHEN $10::bigint > 0 THEN to_timestamp($10::bigint) END)
 RETURNING id`, write.GiftID, revision, write.UpgradeStars, write.SupplyTotal, write.SlugPrefix, write.Actor, write.CommandID,
-			write.OfficialGiftID, nullableSHA256(write.SourceManifestSHA256)).Scan(&revisionID); err != nil {
+			write.OfficialGiftID, nullableSHA256(write.SourceManifestSHA256), write.PublishAt).Scan(&revisionID); err != nil {
 			return fmt.Errorf("insert collectible revision: %w", err)
 		}
 		media := NewMediaStore(tx)
@@ -133,19 +138,101 @@ VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, revisionID, strings.TrimSpace(attribut
 				return fmt.Errorf("insert collectible backdrop: %w", err)
 			}
 		}
-		if _, err := tx.Exec(ctx, `
-UPDATE star_gift_collectible_revisions SET status='published', published_at=now() WHERE id=$1`, revisionID); err != nil {
+		// A due row (no schedule, or one already in the past) goes live in this
+		// same transaction, exactly as every publish did before scheduling
+		// existed. A future schedule leaves status='draft': the row is fully
+		// written (attributes included) but star_gift_catalog is left untouched,
+		// so the gift stays exactly as not-yet-upgradeable as it was before this
+		// call -- see CollectibleDropDispatcher, which activates it once due.
+		tag, err := tx.Exec(ctx, `
+UPDATE star_gift_collectible_revisions SET status='published', published_at=now()
+WHERE id=$1 AND (scheduled_publish_at IS NULL OR scheduled_publish_at <= now())`, revisionID)
+		if err != nil {
 			return fmt.Errorf("publish collectible revision: %w", err)
 		}
-		if _, err := tx.Exec(ctx, `
+		if tag.RowsAffected() == 1 {
+			if _, err := tx.Exec(ctx, `
 UPDATE star_gift_catalog SET collectible_revision_id=$2, updated_at=now() WHERE gift_id=$1`, write.GiftID, revisionID); err != nil {
-			return fmt.Errorf("activate collectible revision: %w", err)
+				return fmt.Errorf("activate collectible revision: %w", err)
+			}
 		}
-		var err error
 		result, err = collectibleRevisionByID(ctx, tx, revisionID)
 		return err
 	})
 	return result, err
+}
+
+// PendingCollectibleRevision returns the latest draft revision that carries a
+// future scheduled_publish_at, if any -- the admin panel's view into "this
+// gift has a drop scheduled for X, not live yet". A draft with no schedule at
+// all is not something today's write path produces (see
+// PublishCollectibleRevision above), so it is deliberately excluded here
+// rather than surfaced as an ambiguous, mid-flight state.
+func (s *StarGiftStore) PendingCollectibleRevision(ctx context.Context, giftID int64) (domain.StarGiftCollectibleRevision, bool, error) {
+	var revisionID int64
+	err := s.db.QueryRow(ctx, `
+SELECT id FROM star_gift_collectible_revisions
+WHERE gift_id=$1 AND status='draft' AND scheduled_publish_at IS NOT NULL
+ORDER BY revision DESC LIMIT 1`, giftID).Scan(&revisionID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.StarGiftCollectibleRevision{}, false, nil
+	}
+	if err != nil {
+		return domain.StarGiftCollectibleRevision{}, false, fmt.Errorf("get pending collectible revision: %w", err)
+	}
+	revision, err := collectibleRevisionByID(ctx, s.db, revisionID)
+	if err != nil {
+		return domain.StarGiftCollectibleRevision{}, false, err
+	}
+	return revision, true, nil
+}
+
+// ActivateDueCollectibleRevisions finds every draft collectible revision
+// whose scheduled_publish_at has arrived and activates it: the same two-step
+// (status -> published, star_gift_catalog.collectible_revision_id -> this
+// revision) that PublishCollectibleRevision performs inline for an immediate
+// publish, just run later by CollectibleDropDispatcher instead of inside the
+// original admin request. Returns the gift IDs that went live this pass, for
+// cache invalidation/logging.
+func (s *StarGiftStore) ActivateDueCollectibleRevisions(ctx context.Context) ([]int64, error) {
+	type due struct{ revisionID, giftID int64 }
+	var giftIDs []int64
+	err := withTx(ctx, s.db, "activate due collectible star gift revisions", func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `
+SELECT id, gift_id FROM star_gift_collectible_revisions
+WHERE status='draft' AND scheduled_publish_at IS NOT NULL AND scheduled_publish_at <= now()
+FOR UPDATE`)
+		if err != nil {
+			return fmt.Errorf("list due collectible revisions: %w", err)
+		}
+		var items []due
+		for rows.Next() {
+			var d due
+			if err := rows.Scan(&d.revisionID, &d.giftID); err != nil {
+				rows.Close()
+				return fmt.Errorf("scan due collectible revision: %w", err)
+			}
+			items = append(items, d)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return fmt.Errorf("iterate due collectible revisions: %w", err)
+		}
+		rows.Close()
+		for _, d := range items {
+			if _, err := tx.Exec(ctx, `
+UPDATE star_gift_collectible_revisions SET status='published', published_at=now() WHERE id=$1`, d.revisionID); err != nil {
+				return fmt.Errorf("publish due collectible revision %d: %w", d.revisionID, err)
+			}
+			if _, err := tx.Exec(ctx, `
+UPDATE star_gift_catalog SET collectible_revision_id=$2, updated_at=now() WHERE gift_id=$1`, d.giftID, d.revisionID); err != nil {
+				return fmt.Errorf("activate due collectible revision %d: %w", d.revisionID, err)
+			}
+			giftIDs = append(giftIDs, d.giftID)
+		}
+		return nil
+	})
+	return giftIDs, err
 }
 
 func (s *StarGiftStore) ActiveCollectibleRevision(ctx context.Context, giftID int64) (domain.StarGiftCollectibleRevision, bool, error) {
@@ -214,6 +301,39 @@ WHERE c.gift_id=ANY($1) AND r.status='published'`, giftIDs)
 	return out, nil
 }
 
+// PendingCollectibleAvailability is CollectibleAvailability's counterpart for scheduled-but-not-
+// yet-live drops. Unlike CollectibleAvailability, it does not go through star_gift_catalog.
+// collectible_revision_id (that column is set only once a pool actually activates), so it
+// reads star_gift_collectible_revisions directly; DISTINCT ON picks the newest draft in the
+// (should be rare, but not impossible) case of more than one scheduled revision per gift.
+func (s *StarGiftStore) PendingCollectibleAvailability(ctx context.Context, giftIDs []int64) (map[int64]domain.StarGiftCollectibleAvailability, error) {
+	out := make(map[int64]domain.StarGiftCollectibleAvailability, len(giftIDs))
+	if len(giftIDs) == 0 {
+		return out, nil
+	}
+	rows, err := s.db.Query(ctx, `
+SELECT DISTINCT ON (gift_id) gift_id, upgrade_stars, supply_total, issued
+FROM star_gift_collectible_revisions
+WHERE gift_id=ANY($1) AND status='draft' AND scheduled_publish_at IS NOT NULL
+ORDER BY gift_id, revision DESC`, giftIDs)
+	if err != nil {
+		return nil, fmt.Errorf("list pending collectible availability: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var giftID int64
+		var availability domain.StarGiftCollectibleAvailability
+		if err := rows.Scan(&giftID, &availability.UpgradeStars, &availability.SupplyTotal, &availability.Issued); err != nil {
+			return nil, fmt.Errorf("scan pending collectible availability: %w", err)
+		}
+		out[giftID] = availability
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list pending collectible availability rows: %w", err)
+	}
+	return out, nil
+}
+
 func collectibleRevisionByID(ctx context.Context, db sqlcgen.DBTX, revisionID int64) (domain.StarGiftCollectibleRevision, error) {
 	return readCollectibleRevisionByID(ctx, db, revisionID, collectibleRevisionReadOptions{includeAnimationJSON: true})
 }
@@ -230,20 +350,24 @@ type collectibleRevisionReadOptions struct {
 func readCollectibleRevisionByID(ctx context.Context, db sqlcgen.DBTX, revisionID int64, options collectibleRevisionReadOptions) (domain.StarGiftCollectibleRevision, error) {
 	var revision domain.StarGiftCollectibleRevision
 	var status string
-	var publishedAt pgtype.Timestamptz
+	var publishedAt, scheduledPublishAt pgtype.Timestamptz
 	if err := db.QueryRow(ctx, `
 SELECT id, gift_id, revision, upgrade_stars, supply_total, issued, slug_prefix, status,
-       created_by, created_at, published_at, COALESCE(official_gift_id,0), source_manifest_sha256
+       created_by, created_at, published_at, COALESCE(official_gift_id,0), source_manifest_sha256,
+       scheduled_publish_at
 FROM star_gift_collectible_revisions WHERE id=$1`, revisionID).Scan(
 		&revision.ID, &revision.GiftID, &revision.Revision, &revision.UpgradeStars, &revision.SupplyTotal,
 		&revision.Issued, &revision.SlugPrefix, &status, &revision.CreatedBy, &revision.CreatedAt, &publishedAt,
-		&revision.OfficialGiftID, &revision.SourceManifestSHA256,
+		&revision.OfficialGiftID, &revision.SourceManifestSHA256, &scheduledPublishAt,
 	); err != nil {
 		return domain.StarGiftCollectibleRevision{}, fmt.Errorf("get collectible revision: %w", err)
 	}
 	revision.Published = status == "published"
 	if publishedAt.Valid {
 		revision.PublishedAt = publishedAt.Time
+	}
+	if scheduledPublishAt.Valid {
+		revision.ScheduledPublishAt = scheduledPublishAt.Time.Unix()
 	}
 	var err error
 	if revision.Models, err = listAnimatedCollectibleAttributes(ctx, db, revisionID, domain.StarGiftCollectibleModel, options); err != nil {

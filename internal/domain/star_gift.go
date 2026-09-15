@@ -182,19 +182,33 @@ type StarGiftCollectibleRevision struct {
 	PublishedAt          time.Time
 	OfficialGiftID       int64
 	SourceManifestSHA256 []byte
+	// ScheduledPublishAt is set (Unix seconds) whenever this revision was
+	// authored as a deferred drop, whether it is still Published==false and
+	// waiting on CollectibleDropDispatcher, or has already gone live -- the
+	// timestamp itself is preserved either way as the record of when the
+	// operator asked for it to open. Zero means the revision was published
+	// immediately and was never scheduled.
+	ScheduledPublishAt int64
 }
 
 // StarGiftCollectibleWrite 是后台创建/发布属性池的协议无关输入。
 type StarGiftCollectibleWrite struct {
-	GiftID               int64
-	UpgradeStars         int64
-	SupplyTotal          int
-	SlugPrefix           string
-	Models               []StarGiftCollectibleAttribute
-	Patterns             []StarGiftCollectibleAttribute
-	Backdrops            []StarGiftCollectibleAttribute
-	Actor                string
-	CommandID            string
+	GiftID       int64
+	UpgradeStars int64
+	SupplyTotal  int
+	SlugPrefix   string
+	Models       []StarGiftCollectibleAttribute
+	Patterns     []StarGiftCollectibleAttribute
+	Backdrops    []StarGiftCollectibleAttribute
+	Actor        string
+	CommandID    string
+	// PublishAt is Unix seconds; zero (or any instant at/before the write
+	// commits) publishes the pool immediately, exactly like before this
+	// field existed. A future instant instead stores the pool as an
+	// immutable-once-live draft and leaves the actual go-live to
+	// CollectibleDropDispatcher, which polls for and activates due drafts --
+	// see PublishCollectibleRevision's package doc comment.
+	PublishAt            int64
 	OfficialGiftID       int64
 	SourceManifestSHA256 []byte
 }
@@ -1197,6 +1211,9 @@ func ValidateStarGiftCollectibleDraft(write StarGiftCollectibleWrite) error {
 	if write.OfficialGiftID < 0 ||
 		(write.OfficialGiftID == 0 && len(write.SourceManifestSHA256) != 0) ||
 		(write.OfficialGiftID > 0 && len(write.SourceManifestSHA256) != 32) {
+		return ErrStarGiftCollectibleInvalid
+	}
+	if write.PublishAt < 0 {
 		return ErrStarGiftCollectibleInvalid
 	}
 	if err := validateStarGiftAttributes(write.Models, StarGiftCollectibleModel, false); err != nil {

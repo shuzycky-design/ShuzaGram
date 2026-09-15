@@ -106,6 +106,7 @@ func (s *server) routes() http.Handler {
 	mux.Handle("GET /api/official-gifts/{id}/animation", s.requireAuthAPI(http.HandlerFunc(s.handleOfficialStarGiftAnimationAPI)))
 	mux.Handle("GET /api/gifts/{id}/animation", s.requireAuthAPI(http.HandlerFunc(s.handleStarGiftAnimationAPI)))
 	mux.Handle("GET /api/gifts/{id}/collectibles", s.requireAuthAPI(http.HandlerFunc(s.handleStarGiftCollectiblesAPI)))
+	mux.Handle("GET /api/gifts/{id}/collectibles/pending", s.requireAuthAPI(http.HandlerFunc(s.handlePendingStarGiftCollectibleAPI)))
 	mux.Handle("GET /api/gifts/{id}/collectibles/{kind}/{attribute_id}/animation", s.requireAuthAPI(http.HandlerFunc(s.handleStarGiftCollectibleAnimationAPI)))
 	mux.Handle("GET /api/collectible-usernames", s.requireAuthAPI(http.HandlerFunc(s.handleCollectibleUsernamesAPI)))
 	mux.Handle("GET /api/collectible-usernames/{id}", s.requireAuthAPI(http.HandlerFunc(s.handleCollectibleUsernameDetailAPI)))
@@ -607,6 +608,15 @@ func (s *server) handleStarGiftCollectiblesAPI(w http.ResponseWriter, r *http.Re
 		return
 	}
 	s.proxyAdminJSON(w, r, fmt.Sprintf("/v1/gifts/%d/collectibles", giftID), 4<<20)
+}
+
+func (s *server) handlePendingStarGiftCollectibleAPI(w http.ResponseWriter, r *http.Request) {
+	giftID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || giftID <= 0 {
+		writeAPIError(w, http.StatusBadRequest, "invalid gift id")
+		return
+	}
+	s.proxyAdminJSON(w, r, fmt.Sprintf("/v1/gifts/%d/collectibles/pending", giftID), 4<<20)
 }
 
 func (s *server) handleOfficialStarGiftsAPI(w http.ResponseWriter, r *http.Request) {
@@ -2298,6 +2308,8 @@ type publishStarGiftCollectiblesAPIRequest struct {
 	Models       []admin.StarGiftCollectibleAnimationUpload `json:"models"`
 	Patterns     []admin.StarGiftCollectibleAnimationUpload `json:"patterns"`
 	Backdrops    []admin.StarGiftCollectibleBackdropInput   `json:"backdrops"`
+	// PublishAt is Unix seconds; zero or omitted publishes immediately.
+	PublishAt int64 `json:"publish_at,omitempty"`
 }
 
 func (s *server) handlePublishStarGiftCollectiblesAPI(w http.ResponseWriter, r *http.Request) {
@@ -2365,6 +2377,7 @@ func (s *server) handlePublishStarGiftCollectiblesAPI(w http.ResponseWriter, r *
 		CommandMeta: s.commandMetaFromAPI(r, body.CommandID, body.Reason, body.Confirm, "publish-gift-collectibles"),
 		GiftID:      giftID, UpgradeStars: body.UpgradeStars, SupplyTotal: body.SupplyTotal,
 		SlugPrefix: body.SlugPrefix, Models: body.Models, Patterns: body.Patterns, Backdrops: body.Backdrops,
+		PublishAt: body.PublishAt,
 	}
 	result, err := s.callAdminCollectibleMultipart(r.Context(), fmt.Sprintf("/v1/gifts/%d/collectibles/publish", giftID), req)
 	writeCommandResultAPI(w, result, err)

@@ -850,3 +850,142 @@ func upgradedSourceEditForUser(result domain.StarGiftUpgradeResult, userID int64
 	}
 	return domain.EditedMessageForUser{UserID: userID}
 }
+
+// scheduledCollectibleWrite builds a minimal valid collectible pool (2 of
+// each attribute kind, no Crafted/official provenance) for the deferred-drop
+// tests below -- unlike the full pool used earlier in this file, these tests
+// care about scheduling, not the complete attribute shape.
+func scheduledCollectibleWrite(giftID int64, suffix string, publishAt int64) domain.StarGiftCollectibleWrite {
+	baseDocumentID := time.Now().UnixNano() & 0x7ffffffffffff000
+	return domain.StarGiftCollectibleWrite{
+		GiftID: giftID, UpgradeStars: 100, SupplyTotal: 500, SlugPrefix: "sched-" + suffix,
+		Models: []domain.StarGiftCollectibleAttribute{
+			{Kind: domain.StarGiftCollectibleModel, Name: "Model A", RarityKind: domain.StarGiftRarityPermille, RarityPermille: 500,
+				Document: collectibleTestDocumentPtr(baseDocumentID+1, "model-a.tgs"), Blob: collectibleTestBlobPtr(baseDocumentID+1, "model-a"), Animation: collectibleTestAnimationPtr("model-a.tgs")},
+			{Kind: domain.StarGiftCollectibleModel, Name: "Model B", RarityKind: domain.StarGiftRarityPermille, RarityPermille: 500,
+				Document: collectibleTestDocumentPtr(baseDocumentID+2, "model-b.tgs"), Blob: collectibleTestBlobPtr(baseDocumentID+2, "model-b"), Animation: collectibleTestAnimationPtr("model-b.tgs")},
+		},
+		Patterns: []domain.StarGiftCollectibleAttribute{
+			{Kind: domain.StarGiftCollectiblePattern, Name: "Pattern A", RarityKind: domain.StarGiftRarityPermille, RarityPermille: 500,
+				Document: collectibleTestPatternDocumentPtr(baseDocumentID+3, "pattern-a.tgs"), Blob: collectibleTestBlobPtr(baseDocumentID+3, "pattern-a"), Animation: collectibleTestAnimationPtr("pattern-a.tgs")},
+			{Kind: domain.StarGiftCollectiblePattern, Name: "Pattern B", RarityKind: domain.StarGiftRarityPermille, RarityPermille: 500,
+				Document: collectibleTestPatternDocumentPtr(baseDocumentID+4, "pattern-b.tgs"), Blob: collectibleTestBlobPtr(baseDocumentID+4, "pattern-b"), Animation: collectibleTestAnimationPtr("pattern-b.tgs")},
+		},
+		Backdrops: []domain.StarGiftCollectibleAttribute{
+			{Kind: domain.StarGiftCollectibleBackdrop, Name: "Backdrop A", BackdropID: 1, RarityKind: domain.StarGiftRarityPermille, RarityPermille: 500},
+			{Kind: domain.StarGiftCollectibleBackdrop, Name: "Backdrop B", BackdropID: 2, RarityKind: domain.StarGiftRarityPermille, RarityPermille: 500},
+		},
+		Actor: "integration", CommandID: "sched-" + suffix, PublishAt: publishAt,
+	}
+}
+
+func TestStarGiftCollectibleDeferredDropPostgres(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	suffix := randomSuffix(t)
+	gifts := NewStarGiftStore(pool)
+	entry, err := gifts.CreateCatalogRevision(ctx, domain.StarGiftCatalogWrite{
+		Title: "Nebula", Stars: 50, ConvertStars: 25, Enabled: true,
+		Document:  collectibleTestDocument(time.Now().UnixNano()&0x7ffffffffffff000, "gift.tgs"),
+		Blob:      collectibleTestBlob(time.Now().UnixNano()&0x7ffffffffffff000, "gift"),
+		Animation: collectibleTestAnimation("gift.tgs"),
+		Actor:     "integration", CommandID: "catalog-sched-" + suffix,
+	})
+	if err != nil {
+		t.Fatalf("create catalog gift: %v", err)
+	}
+
+	future := time.Now().Add(time.Hour).Unix()
+	draft, err := gifts.PublishCollectibleRevision(ctx, scheduledCollectibleWrite(entry.Gift.ID, suffix, future))
+	if err != nil {
+		t.Fatalf("publish scheduled collectible: %v", err)
+	}
+	if draft.Published {
+		t.Fatalf("future PublishAt must not publish immediately: %+v", draft)
+	}
+	if draft.ScheduledPublishAt != future {
+		t.Fatalf("ScheduledPublishAt=%d, want %d", draft.ScheduledPublishAt, future)
+	}
+
+	// The plain gift stays exactly as not-yet-upgradeable as it was before.
+	if _, found, err := gifts.ActiveCollectibleRevision(ctx, entry.Gift.ID); err != nil || found {
+		t.Fatalf("scheduled draft must not be active: found=%v err=%v", found, err)
+	}
+	plain, found, err := gifts.CatalogGift(ctx, entry.Gift.ID)
+	if err != nil || !found || plain.UpgradeStars != 0 || plain.UpgradeTotal != 0 {
+		t.Fatalf("plain gift must stay non-upgradeable pre-drop: found=%v err=%v gift=%+v", found, err, plain)
+	}
+
+	pending, found, err := gifts.PendingCollectibleRevision(ctx, entry.Gift.ID)
+	if err != nil || !found || pending.SupplyTotal != 500 || pending.ScheduledPublishAt != future {
+		t.Fatalf("pending revision = found:%v err:%v value:%+v", found, err, pending)
+	}
+	pendingAvailability, err := gifts.PendingCollectibleAvailability(ctx, []int64{entry.Gift.ID})
+	if err != nil || pendingAvailability[entry.Gift.ID].SupplyTotal != 500 {
+		t.Fatalf("pending availability = %+v, err=%v", pendingAvailability, err)
+	}
+
+	// Not due yet.
+	activated, err := gifts.ActivateDueCollectibleRevisions(ctx)
+	if err != nil || len(activated) != 0 {
+		t.Fatalf("premature activation: activated=%v err=%v", activated, err)
+	}
+
+	// Back-date the schedule directly (bypassing the immutability guard, which
+	// only locks a row once status='published') to simulate its time arriving,
+	// the same way the earlier memory-store test does.
+	if _, err := pool.Exec(ctx, `UPDATE star_gift_collectible_revisions SET scheduled_publish_at=now() - interval '1 minute' WHERE id=$1`, draft.ID); err != nil {
+		t.Fatalf("back-date schedule: %v", err)
+	}
+	activated, err = gifts.ActivateDueCollectibleRevisions(ctx)
+	if err != nil || len(activated) != 1 || activated[0] != entry.Gift.ID {
+		t.Fatalf("activate due: activated=%v err=%v", activated, err)
+	}
+
+	if _, found, err := gifts.PendingCollectibleRevision(ctx, entry.Gift.ID); err != nil || found {
+		t.Fatalf("revision must no longer be pending: found=%v err=%v", found, err)
+	}
+	live, found, err := gifts.ActiveCollectibleRevision(ctx, entry.Gift.ID)
+	if err != nil || !found || !live.Published || live.ID != draft.ID {
+		t.Fatalf("revision must now be active/live: found=%v err=%v value=%+v", found, err, live)
+	}
+	upgraded, found, err := gifts.CatalogGift(ctx, entry.Gift.ID)
+	if err != nil || !found || upgraded.UpgradeStars != 100 || upgraded.UpgradeTotal != 500 {
+		t.Fatalf("plain gift should now be upgradeable: found=%v err=%v gift=%+v", found, err, upgraded)
+	}
+
+	// Once published, the row is immutable: even scheduled_publish_at itself
+	// (backdated above while still a draft) may no longer change.
+	if _, err := pool.Exec(ctx, `UPDATE star_gift_collectible_revisions SET scheduled_publish_at=now() WHERE id=$1`, draft.ID); err == nil {
+		t.Fatal("published collectible revision accepted a scheduled_publish_at update")
+	}
+}
+
+func TestStarGiftCollectibleImmediatePublishStillWorksPostgres(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	suffix := randomSuffix(t)
+	gifts := NewStarGiftStore(pool)
+	entry, err := gifts.CreateCatalogRevision(ctx, domain.StarGiftCatalogWrite{
+		Title: "Nova", Stars: 50, ConvertStars: 25, Enabled: true,
+		Document:  collectibleTestDocument(time.Now().UnixNano()&0x7ffffffffffff000, "gift.tgs"),
+		Blob:      collectibleTestBlob(time.Now().UnixNano()&0x7ffffffffffff000, "gift"),
+		Animation: collectibleTestAnimation("gift.tgs"),
+		Actor:     "integration", CommandID: "catalog-immediate-" + suffix,
+	})
+	if err != nil {
+		t.Fatalf("create catalog gift: %v", err)
+	}
+	// PublishAt==0 (the zero value) must behave exactly as it did before this
+	// column existed: publish immediately, in the same call.
+	revision, err := gifts.PublishCollectibleRevision(ctx, scheduledCollectibleWrite(entry.Gift.ID, suffix, 0))
+	if err != nil {
+		t.Fatalf("publish immediate collectible: %v", err)
+	}
+	if !revision.Published {
+		t.Fatalf("PublishAt=0 must publish immediately: %+v", revision)
+	}
+	if _, found, err := gifts.PendingCollectibleRevision(ctx, entry.Gift.ID); err != nil || found {
+		t.Fatalf("immediately published revision must not also be pending: found=%v err=%v", found, err)
+	}
+}

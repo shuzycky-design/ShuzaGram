@@ -350,6 +350,7 @@ func (r *Router) onPaymentsGetStarGifts(ctx context.Context, hash int) (tg.Payme
 	// 会保留 catalog hash 但丢失礼物缓存——一旦命中 hash 返回 NotModified，送礼选择器就永远空。
 	// 始终回完整目录（带宽可忽略），保证客户端无论缓存状态都能渲染礼物网格。
 	_ = catalogHash
+	r.applyPendingCollectibleBadges(ctx, catalog)
 	return &tg.PaymentsStarGifts{
 		Hash:  catalogHash,
 		Gifts: tgStarGifts(catalog),
@@ -1487,6 +1488,46 @@ func emptySavedStarGifts() *tg.PaymentsSavedStarGifts {
 		Gifts: []tg.SavedStarGift{},
 		Chats: []tg.ChatClass{},
 		Users: []tg.UserClass{},
+	}
+}
+
+// applyPendingCollectibleBadges overlays a "rare" badge (the vanilla protocol's
+// only mechanism for it: the Limited flag plus availability_total/remains) onto
+// plain gifts that have a collectible drop scheduled but not yet live. The
+// badge tracks the future collectible's tirage, not the plain gift's own
+// purchase count -- buying the plain gift never decrements it, since
+// prepareStarGiftPurchase (internal/store/postgres/star_gift_purchase.go)
+// re-reads Limited fresh from the immutable catalog revision inside its own
+// transaction and never sees this in-memory overlay. Issued is always 0
+// pre-drop: nothing can have been upgraded from a pool that has not opened.
+// Gifts that are already Limited, sold out or auction-based keep their own
+// existing semantics untouched.
+func (r *Router) applyPendingCollectibleBadges(ctx context.Context, catalog []domain.StarGift) {
+	if r == nil || r.deps.Gifts == nil || len(catalog) == 0 {
+		return
+	}
+	candidates := make([]int64, 0, len(catalog))
+	for _, g := range catalog {
+		if !g.Limited && !g.Auction && !g.SoldOut {
+			candidates = append(candidates, g.ID)
+		}
+	}
+	if len(candidates) == 0 {
+		return
+	}
+	pending, err := r.deps.Gifts.PendingCollectibleAvailability(ctx, candidates)
+	if err != nil {
+		r.log.Warn("pending collectible availability lookup failed", zap.Error(err))
+		return
+	}
+	for i := range catalog {
+		avail, ok := pending[catalog[i].ID]
+		if !ok || avail.SupplyTotal <= 0 {
+			continue
+		}
+		catalog[i].Limited = true
+		catalog[i].AvailabilityTotal = avail.SupplyTotal
+		catalog[i].AvailabilityRemains = avail.SupplyTotal
 	}
 }
 

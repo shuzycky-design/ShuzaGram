@@ -89,6 +89,22 @@ func TestValidateStarGiftCollectibleDraftOfficialProvenance(t *testing.T) {
 	}
 }
 
+func TestValidateStarGiftCollectibleDraftPublishAt(t *testing.T) {
+	write := validCollectibleDraft()
+	write.PublishAt = 0
+	if err := ValidateStarGiftCollectibleDraft(write); err != nil {
+		t.Fatalf("zero PublishAt (immediate publish) should be valid: %v", err)
+	}
+	write.PublishAt = 4102444800 // 2100-01-01, comfortably future
+	if err := ValidateStarGiftCollectibleDraft(write); err != nil {
+		t.Fatalf("future PublishAt should be valid: %v", err)
+	}
+	write.PublishAt = -1
+	if err := ValidateStarGiftCollectibleDraft(write); !errors.Is(err, ErrStarGiftCollectibleInvalid) {
+		t.Fatalf("err=%v, want ErrStarGiftCollectibleInvalid for negative PublishAt", err)
+	}
+}
+
 func TestValidateStarGiftCollectibleDraftRejectsImplicitRarity(t *testing.T) {
 	write := validCollectibleDraft()
 	write.Models[0].RarityKind = ""

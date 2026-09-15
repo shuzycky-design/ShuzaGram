@@ -96,6 +96,7 @@ type Service interface {
 	DeleteGifCatalogEntry(ctx context.Context, req admin.DeleteGifCatalogEntryRequest) (admin.CommandResult, error)
 	GifCatalogDocumentPreview(ctx context.Context, documentID int64) ([]byte, string, bool, error)
 	StarGiftCollectibles(ctx context.Context, giftID int64) (domain.StarGiftUpgradePreview, bool, error)
+	PendingStarGiftCollectible(ctx context.Context, giftID int64) (domain.StarGiftCollectibleRevision, bool, error)
 	StarGiftCollectibleAnimation(ctx context.Context, giftID int64, kind domain.StarGiftCollectibleAttributeKind, attributeID int64) ([]byte, bool, error)
 	ModerationCases(ctx context.Context, filter domain.ModerationCaseFilter) ([]domain.ModerationCase, error)
 	ModerationCase(ctx context.Context, caseID int64) (domain.ModerationCaseDetail, bool, error)
@@ -285,6 +286,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /v1/gif-catalog/set-sort-order", s.authenticated(s.handleSetGifCatalogSortOrder))
 	mux.HandleFunc("POST /v1/gif-catalog/delete", s.authenticated(s.handleDeleteGifCatalogEntry))
 	mux.HandleFunc("GET /v1/gifts/{id}/collectibles", s.authenticated(s.handleStarGiftCollectibles))
+	mux.HandleFunc("GET /v1/gifts/{id}/collectibles/pending", s.authenticated(s.handlePendingStarGiftCollectible))
 	mux.HandleFunc("GET /v1/gifts/{id}/collectibles/{kind}/{attribute_id}/animation", s.authenticated(s.handleStarGiftCollectibleAnimation))
 	mux.HandleFunc("GET /v1/moderation/cases", s.authenticated(s.handleModerationCases))
 	mux.HandleFunc("GET /v1/moderation/cases/{id}", s.authenticated(s.handleModerationCase))
@@ -1318,6 +1320,31 @@ func (s *Server) handleStarGiftCollectibles(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeJSON(w, http.StatusOK, collectiblePreviewResponse(preview))
+}
+
+// handlePendingStarGiftCollectible reports a scheduled-but-not-yet-live
+// collectible drop, if any -- distinct from handleStarGiftCollectibles above,
+// which only ever shows a pool that has already gone live.
+func (s *Server) handlePendingStarGiftCollectible(w http.ResponseWriter, r *http.Request) {
+	giftID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || giftID <= 0 {
+		writeError(w, http.StatusBadRequest, "invalid gift id")
+		return
+	}
+	revision, found, err := s.svc.PendingStarGiftCollectible(r.Context(), giftID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !found {
+		writeJSON(w, http.StatusOK, map[string]any{"found": false, "gift_id": strconv.FormatInt(giftID, 10)})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"found": true, "gift_id": strconv.FormatInt(giftID, 10), "revision": revision.Revision,
+		"upgrade_stars": strconv.FormatInt(revision.UpgradeStars, 10), "supply_total": revision.SupplyTotal,
+		"slug_prefix": revision.SlugPrefix, "scheduled_publish_at": revision.ScheduledPublishAt,
+	})
 }
 
 func collectiblePreviewResponse(preview domain.StarGiftUpgradePreview) map[string]any {

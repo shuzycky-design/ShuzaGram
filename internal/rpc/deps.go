@@ -1217,6 +1217,13 @@ type GiftsService interface {
 	CollectiblePreview(ctx context.Context, giftID int64) (domain.StarGiftUpgradePreview, bool, error)
 	CollectiblePreviewSample(ctx context.Context, giftID int64) (domain.StarGiftUpgradePreview, bool, error)
 	CollectibleAvailability(ctx context.Context, giftIDs []int64) (map[int64]domain.StarGiftCollectibleAvailability, error)
+	// ActivateDueCollectibleRevisions publishes every scheduled collectible drop whose time has
+	// come, returning the gift IDs that went live. Polled by CollectibleDropDispatcher.
+	ActivateDueCollectibleRevisions(ctx context.Context) ([]int64, error)
+	// PendingCollectibleAvailability is CollectibleAvailability's counterpart for gifts whose
+	// pool is scheduled but not yet live -- used only to badge the plain gift ahead of the
+	// drop (see onPaymentsGetStarGifts), never for upgrade eligibility.
+	PendingCollectibleAvailability(ctx context.Context, giftIDs []int64) (map[int64]domain.StarGiftCollectibleAvailability, error)
 	UniqueBySlug(ctx context.Context, slug string) (domain.UniqueStarGift, bool, error)
 	UniqueByID(ctx context.Context, uniqueGiftID int64) (domain.UniqueStarGift, bool, error)
 	UniqueByIDs(ctx context.Context, uniqueGiftIDs []int64) (map[int64]domain.UniqueStarGift, error)

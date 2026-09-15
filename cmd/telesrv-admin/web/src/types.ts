@@ -420,6 +420,17 @@ export type StarGiftCollectiblePreview = {
   backdrops?: StarGiftCollectibleAttributeRow[];
 };
 
+// A scheduled-but-not-yet-live collectible drop -- see GET .../collectibles/pending.
+export type StarGiftPendingCollectible = {
+  found: boolean;
+  gift_id: string;
+  revision?: number;
+  upgrade_stars?: string;
+  supply_total?: number;
+  slug_prefix?: string;
+  scheduled_publish_at?: number;
+};
+
 export type CollectibleUsernameStatus = "vault" | "owned" | "burned";
 
 export type CollectiblePeerType = "" | "user" | "channel";

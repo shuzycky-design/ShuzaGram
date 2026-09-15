@@ -24,13 +24,25 @@ type StarGiftStore interface {
 	// AnimationJSON 返回当前版本的规范化 Lottie JSON，供管理后台安全预览。
 	AnimationJSON(ctx context.Context, giftID int64) ([]byte, bool, error)
 	// PublishCollectibleRevision validates and atomically publishes a new immutable attribute pool.
+	// A future write.PublishAt instead stores it as a draft for CollectibleDropDispatcher to
+	// activate once due -- see the Postgres implementation's doc comment.
 	PublishCollectibleRevision(ctx context.Context, write domain.StarGiftCollectibleWrite) (domain.StarGiftCollectibleRevision, error)
 	ActiveCollectibleRevision(ctx context.Context, giftID int64) (domain.StarGiftCollectibleRevision, bool, error)
+	// PendingCollectibleRevision returns a gift's not-yet-live scheduled drop, if any.
+	PendingCollectibleRevision(ctx context.Context, giftID int64) (domain.StarGiftCollectibleRevision, bool, error)
+	// ActivateDueCollectibleRevisions publishes every scheduled draft whose time has come and
+	// returns the affected gift IDs. Called by CollectibleDropDispatcher, not request handlers.
+	ActivateDueCollectibleRevisions(ctx context.Context) ([]int64, error)
 	// ActiveCollectibleProjection omits heavyweight animation bodies from read-only client/admin
 	// projections. samplePerKind=0 returns the complete attribute metadata; a positive value
 	// returns at most that many randomly selected ordinary-upgrade attributes per kind.
 	ActiveCollectibleProjection(ctx context.Context, giftID int64, samplePerKind int) (domain.StarGiftCollectibleRevision, bool, error)
 	CollectibleAvailability(ctx context.Context, giftIDs []int64) (map[int64]domain.StarGiftCollectibleAvailability, error)
+	// PendingCollectibleAvailability is CollectibleAvailability's counterpart for gifts whose
+	// collectible pool is scheduled but not yet live -- the "rare" badge shown on the plain gift
+	// ahead of a deferred drop (Issued is always 0: nothing can have been upgraded from an
+	// unpublished pool). Never used for upgrade eligibility, only for this pre-drop display.
+	PendingCollectibleAvailability(ctx context.Context, giftIDs []int64) (map[int64]domain.StarGiftCollectibleAvailability, error)
 	CollectibleAnimationJSON(ctx context.Context, giftID int64, kind domain.StarGiftCollectibleAttributeKind, attributeID int64) ([]byte, bool, error)
 	UniqueBySlug(ctx context.Context, slug string) (domain.UniqueStarGift, bool, error)
 	UniqueByID(ctx context.Context, uniqueGiftID int64) (domain.UniqueStarGift, bool, error)

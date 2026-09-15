@@ -487,6 +487,37 @@ func (s *Service) CollectibleAvailability(ctx context.Context, giftIDs []int64) 
 	return s.store.CollectibleAvailability(ctx, giftIDs)
 }
 
+// PendingCollectibleAvailability is CollectibleAvailability's counterpart for scheduled-but-
+// not-yet-live drops -- see the store method's doc comment.
+func (s *Service) PendingCollectibleAvailability(ctx context.Context, giftIDs []int64) (map[int64]domain.StarGiftCollectibleAvailability, error) {
+	if s == nil || s.store == nil || len(giftIDs) == 0 {
+		return map[int64]domain.StarGiftCollectibleAvailability{}, nil
+	}
+	return s.store.PendingCollectibleAvailability(ctx, giftIDs)
+}
+
+// PendingCollectible returns a gift's not-yet-live scheduled collectible drop, if any --
+// the admin panel's view into deferred drops before CollectibleDropDispatcher activates them.
+func (s *Service) PendingCollectible(ctx context.Context, giftID int64) (domain.StarGiftCollectibleRevision, bool, error) {
+	if s == nil || s.store == nil || giftID <= 0 {
+		return domain.StarGiftCollectibleRevision{}, false, nil
+	}
+	return s.store.PendingCollectibleRevision(ctx, giftID)
+}
+
+// ActivateDueCollectibleRevisions publishes every scheduled collectible drop whose time has
+// come. Called by CollectibleDropDispatcher, not request handlers.
+func (s *Service) ActivateDueCollectibleRevisions(ctx context.Context) ([]int64, error) {
+	if s == nil || s.store == nil {
+		return nil, nil
+	}
+	giftIDs, err := s.store.ActivateDueCollectibleRevisions(ctx)
+	if err == nil && len(giftIDs) > 0 {
+		s.InvalidateStarGiftCatalog()
+	}
+	return giftIDs, err
+}
+
 func (s *Service) CollectibleAnimationJSON(ctx context.Context, giftID int64, kind domain.StarGiftCollectibleAttributeKind, attributeID int64) ([]byte, bool, error) {
 	if s == nil || s.store == nil {
 		return nil, false, nil

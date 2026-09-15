@@ -506,6 +506,9 @@ type Config struct {
 	CallSignalingRate int
 	// CallExpiryInterval 是通话超时兜底 dispatcher 的轮询间隔。
 	CallExpiryInterval time.Duration
+	// CollectibleDropInterval is the poll interval for activating deferred
+	// star gift collectible drops whose scheduled time has arrived.
+	CollectibleDropInterval time.Duration
 
 	// PremiumGrantMonths 是新注册账号默认赠送的会员月数；0 关闭赠送。
 	// 存量账号的一次性赠送由迁移 0094 backfill，不受该配置影响。
@@ -1061,13 +1064,14 @@ func Load() (Config, error) {
 		UploadInFlightMaxParts: envIntOr("TELESRV_UPLOAD_INFLIGHT_MAX_PARTS", 8000),
 		UploadInFlightMaxFiles: envIntOr("TELESRV_UPLOAD_INFLIGHT_MAX_FILES", 64),
 
-		CallRingTimeout:        envDurationOr("TELESRV_CALL_RING_TIMEOUT", 90*time.Second),
-		CallTombstoneTTL:       envDurationOr("TELESRV_CALL_TOMBSTONE_TTL", 60*time.Second),
-		CallMaxActivePerUser:   envIntOr("TELESRV_CALL_MAX_ACTIVE_PER_USER", 4),
-		CallRegistryMaxEntries: envIntOr("TELESRV_CALL_REGISTRY_MAX_ENTRIES", 10_000),
-		CallSignalingMaxBytes:  envIntOr("TELESRV_CALL_SIGNALING_MAX_BYTES", 65536),
-		CallSignalingRate:      envIntOr("TELESRV_CALL_SIGNALING_RATE", 50),
-		CallExpiryInterval:     envDurationOr("TELESRV_CALL_EXPIRY_INTERVAL", time.Second),
+		CallRingTimeout:         envDurationOr("TELESRV_CALL_RING_TIMEOUT", 90*time.Second),
+		CallTombstoneTTL:        envDurationOr("TELESRV_CALL_TOMBSTONE_TTL", 60*time.Second),
+		CallMaxActivePerUser:    envIntOr("TELESRV_CALL_MAX_ACTIVE_PER_USER", 4),
+		CallRegistryMaxEntries:  envIntOr("TELESRV_CALL_REGISTRY_MAX_ENTRIES", 10_000),
+		CallSignalingMaxBytes:   envIntOr("TELESRV_CALL_SIGNALING_MAX_BYTES", 65536),
+		CallSignalingRate:       envIntOr("TELESRV_CALL_SIGNALING_RATE", 50),
+		CallExpiryInterval:      envDurationOr("TELESRV_CALL_EXPIRY_INTERVAL", time.Second),
+		CollectibleDropInterval: envDurationOr("TELESRV_COLLECTIBLE_DROP_INTERVAL", 30*time.Second),
 
 		PremiumGrantMonths:               envIntOr("TELESRV_PREMIUM_GRANT_MONTHS", 3),
 		PremiumBotUsername:               premiumBotUsername,

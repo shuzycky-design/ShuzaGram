@@ -6,28 +6,30 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"telesrv/internal/domain"
 )
 
 // StarGiftStore 是 store.StarGiftStore 的内存实现。
 type StarGiftStore struct {
-	mu               sync.Mutex
-	nextID           int64
-	nextGiftID       int64
-	nextRevID        int64
-	gifts            []domain.SavedStarGift // 追加序
-	catalog          map[int64]domain.StarGift
-	revisions        map[int64]domain.StarGift
-	enabled          map[int64]bool
-	sortOrder        map[int64]int
-	animations       map[int64][]byte
-	collectibles     map[int64]domain.StarGiftCollectibleRevision
-	uniqueByID       map[int64]domain.UniqueStarGift
-	uniqueBySlug     map[string]int64
-	collections      map[domain.Peer][]domain.StarGiftCollection
-	nextAttributeID  int64
-	nextCollectionID int
+	mu                  sync.Mutex
+	nextID              int64
+	nextGiftID          int64
+	nextRevID           int64
+	gifts               []domain.SavedStarGift // 追加序
+	catalog             map[int64]domain.StarGift
+	revisions           map[int64]domain.StarGift
+	enabled             map[int64]bool
+	sortOrder           map[int64]int
+	animations          map[int64][]byte
+	collectibles        map[int64]domain.StarGiftCollectibleRevision
+	pendingCollectibles map[int64]domain.StarGiftCollectibleRevision // draft, scheduled_publish_at set, not yet due
+	uniqueByID          map[int64]domain.UniqueStarGift
+	uniqueBySlug        map[string]int64
+	collections         map[domain.Peer][]domain.StarGiftCollection
+	nextAttributeID     int64
+	nextCollectionID    int
 }
 
 // NewStarGiftStore 创建内存 StarGiftStore。
@@ -35,8 +37,9 @@ func NewStarGiftStore() *StarGiftStore {
 	return &StarGiftStore{
 		catalog: make(map[int64]domain.StarGift), revisions: make(map[int64]domain.StarGift),
 		enabled: make(map[int64]bool), sortOrder: make(map[int64]int), animations: make(map[int64][]byte),
-		collectibles: make(map[int64]domain.StarGiftCollectibleRevision),
-		uniqueByID:   make(map[int64]domain.UniqueStarGift), uniqueBySlug: make(map[string]int64),
+		collectibles:        make(map[int64]domain.StarGiftCollectibleRevision),
+		pendingCollectibles: make(map[int64]domain.StarGiftCollectibleRevision),
+		uniqueByID:          make(map[int64]domain.UniqueStarGift), uniqueBySlug: make(map[string]int64),
 		collections: make(map[domain.Peer][]domain.StarGiftCollection),
 	}
 }
@@ -220,12 +223,14 @@ func (s *StarGiftStore) publishCollectibleRevisionLocked(write domain.StarGiftCo
 		return domain.StarGiftCollectibleRevision{}, domain.ErrStarGiftNotFound
 	}
 	previous := s.collectibles[write.GiftID]
+	due := write.PublishAt <= 0 || write.PublishAt <= time.Now().Unix()
 	revision := domain.StarGiftCollectibleRevision{
 		ID: previous.ID + 1, GiftID: write.GiftID, Revision: previous.Revision + 1,
 		UpgradeStars: write.UpgradeStars, SupplyTotal: write.SupplyTotal,
-		SlugPrefix: strings.ToLower(strings.TrimSpace(write.SlugPrefix)), Published: true,
+		SlugPrefix: strings.ToLower(strings.TrimSpace(write.SlugPrefix)), Published: due,
 		CreatedBy:      write.Actor,
 		OfficialGiftID: write.OfficialGiftID, SourceManifestSHA256: append([]byte(nil), write.SourceManifestSHA256...),
+		ScheduledPublishAt: write.PublishAt,
 	}
 	if revision.ID == 1 {
 		revision.ID = write.GiftID*1000 + 1
@@ -233,6 +238,12 @@ func (s *StarGiftStore) publishCollectibleRevisionLocked(write domain.StarGiftCo
 	revision.Models = s.allocateCollectibleAttributes(write.Models, revision.ID)
 	revision.Patterns = s.allocateCollectibleAttributes(write.Patterns, revision.ID)
 	revision.Backdrops = s.allocateCollectibleAttributes(write.Backdrops, revision.ID)
+	if !due {
+		s.pendingCollectibles[write.GiftID] = revision
+		return cloneCollectibleRevision(revision), nil
+	}
+	delete(s.pendingCollectibles, write.GiftID)
+	revision.PublishedAt = time.Now()
 	s.collectibles[write.GiftID] = revision
 	gift := s.catalog[write.GiftID]
 	gift.UpgradeStars = revision.UpgradeStars
@@ -240,6 +251,38 @@ func (s *StarGiftStore) publishCollectibleRevisionLocked(write domain.StarGiftCo
 	gift.UpgradeIssued = revision.Issued
 	s.catalog[write.GiftID] = gift
 	return cloneCollectibleRevision(revision), nil
+}
+
+func (s *StarGiftStore) PendingCollectibleRevision(_ context.Context, giftID int64) (domain.StarGiftCollectibleRevision, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	revision, ok := s.pendingCollectibles[giftID]
+	return cloneCollectibleRevision(revision), ok, nil
+}
+
+// ActivateDueCollectibleRevisions mirrors the Postgres implementation for
+// tests that exercise CollectibleDropDispatcher against the memory store.
+func (s *StarGiftStore) ActivateDueCollectibleRevisions(_ context.Context) ([]int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now().Unix()
+	var giftIDs []int64
+	for giftID, revision := range s.pendingCollectibles {
+		if revision.ScheduledPublishAt > now {
+			continue
+		}
+		revision.Published = true
+		revision.PublishedAt = time.Now()
+		s.collectibles[giftID] = revision
+		delete(s.pendingCollectibles, giftID)
+		gift := s.catalog[giftID]
+		gift.UpgradeStars = revision.UpgradeStars
+		gift.UpgradeTotal = revision.SupplyTotal
+		gift.UpgradeIssued = revision.Issued
+		s.catalog[giftID] = gift
+		giftIDs = append(giftIDs, giftID)
+	}
+	return giftIDs, nil
 }
 
 func (s *StarGiftStore) allocateCollectibleAttributes(in []domain.StarGiftCollectibleAttribute, revisionID int64) []domain.StarGiftCollectibleAttribute {
@@ -281,6 +324,24 @@ func (s *StarGiftStore) CollectibleAvailability(_ context.Context, giftIDs []int
 	for _, giftID := range giftIDs {
 		revision, ok := s.collectibles[giftID]
 		if !ok || !revision.Published {
+			continue
+		}
+		out[giftID] = domain.StarGiftCollectibleAvailability{
+			UpgradeStars: revision.UpgradeStars,
+			SupplyTotal:  revision.SupplyTotal,
+			Issued:       revision.Issued,
+		}
+	}
+	return out, nil
+}
+
+func (s *StarGiftStore) PendingCollectibleAvailability(_ context.Context, giftIDs []int64) (map[int64]domain.StarGiftCollectibleAvailability, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[int64]domain.StarGiftCollectibleAvailability, len(giftIDs))
+	for _, giftID := range giftIDs {
+		revision, ok := s.pendingCollectibles[giftID]
+		if !ok {
 			continue
 		}
 		out[giftID] = domain.StarGiftCollectibleAvailability{
