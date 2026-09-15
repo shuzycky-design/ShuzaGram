@@ -57,6 +57,7 @@ const (
 	ActionSetStarGiftEnabled      = "gifts.set_enabled"
 	ActionSetStarGiftSortOrder    = "gifts.set_sort_order"
 	ActionGiveGift                = "gifts.give"
+	ActionSetStarGiftSupply       = "gifts.set_supply"
 	ActionDeleteStarGift          = "gifts.delete"
 	ActionCreateBot               = "bot.create"
 	ActionCreateBroadcast         = "broadcast.create"
@@ -341,6 +342,8 @@ type GiftsService interface {
 	CreateCatalogBundle(ctx context.Context, write domain.StarGiftCatalogBundleWrite) (domain.StarGiftCatalogBundleResult, error)
 	SetCatalogEnabled(ctx context.Context, giftID int64, enabled bool) (bool, error)
 	SetCatalogSortOrder(ctx context.Context, giftID int64, sortOrder int) (bool, error)
+	// SetCatalogSupply -- see internal/app/stargifts.Service.SetCatalogSupply.
+	SetCatalogSupply(ctx context.Context, giftID int64, limited bool, total, issued int) (bool, error)
 	AnimationJSON(ctx context.Context, giftID int64) ([]byte, bool, error)
 	CreateCollectibleRevision(ctx context.Context, write domain.StarGiftCollectibleWrite) (domain.StarGiftCollectibleRevision, error)
 	CollectiblePreview(ctx context.Context, giftID int64) (domain.StarGiftUpgradePreview, bool, error)
@@ -4303,6 +4306,40 @@ func (s *Service) SetStarGiftSortOrder(ctx context.Context, req SetStarGiftSortO
 		changed, err := s.gifts.SetCatalogSortOrder(ctx, req.GiftID, req.SortOrder)
 		details["changed"] = changed
 		return CommandResult{Message: "star gift order updated", Details: details}, err
+	})
+}
+
+type SetStarGiftSupplyRequest struct {
+	CommandMeta
+	GiftID int64 `json:"gift_id"`
+	// Limited=false clears the cap entirely (unlimited sale) and Total/Issued
+	// are ignored. Limited=true requires Total > 0 and 0 <= Issued <= Total --
+	// same shape as ImportStarGiftRequest's Limited/AvailabilityTotal/
+	// AvailabilityIssued, just editable on an existing gift without minting a
+	// new catalog revision (see store.StarGiftStore.SetCatalogSupply).
+	Limited            bool `json:"limited"`
+	AvailabilityTotal  int  `json:"availability_total,omitempty"`
+	AvailabilityIssued int  `json:"availability_issued,omitempty"`
+}
+
+func (s *Service) SetStarGiftSupply(ctx context.Context, req SetStarGiftSupplyRequest) (CommandResult, error) {
+	if s == nil || s.gifts == nil || req.GiftID <= 0 {
+		return CommandResult{}, fmt.Errorf("valid star gift and service are required")
+	}
+	if req.Limited && (req.AvailabilityTotal <= 0 || req.AvailabilityIssued < 0 || req.AvailabilityIssued > req.AvailabilityTotal) {
+		return CommandResult{}, domain.ErrStarGiftInvalid
+	}
+	return s.runCommand(ctx, req.CommandMeta, ActionSetStarGiftSupply, 0, domain.Peer{}, req, func() (CommandResult, error) {
+		details := map[string]any{
+			"gift_id": strconv.FormatInt(req.GiftID, 10), "limited": req.Limited,
+			"availability_total": req.AvailabilityTotal, "availability_issued": req.AvailabilityIssued,
+		}
+		if req.DryRun {
+			return CommandResult{Message: "star gift supply change validated", Details: details}, nil
+		}
+		changed, err := s.gifts.SetCatalogSupply(ctx, req.GiftID, req.Limited, req.AvailabilityTotal, req.AvailabilityIssued)
+		details["changed"] = changed
+		return CommandResult{Message: "star gift supply updated", Details: details}, err
 	})
 }
 

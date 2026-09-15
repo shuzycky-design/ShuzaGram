@@ -1641,6 +1641,9 @@ func (*fakeGiftsService) CollectibleAnimationJSON(context.Context, int64, domain
 func (*fakeGiftsService) PendingCollectible(context.Context, int64) (domain.StarGiftCollectibleRevision, bool, error) {
 	return domain.StarGiftCollectibleRevision{}, false, nil
 }
+func (f *fakeGiftsService) SetCatalogSupply(_ context.Context, giftID int64, limited bool, total, issued int) (bool, error) {
+	return true, nil
+}
 func (f *fakeGiftsService) PreviewDeleteStarGift(_ context.Context, giftID int64) (domain.StarGiftDeleteResult, error) {
 	return domain.StarGiftDeleteResult{GiftID: giftID}, nil
 }

@@ -703,6 +703,10 @@ func (fakeService) GiveGift(_ context.Context, req admin.GiveGiftRequest) (admin
 	return admin.CommandResult{CommandID: req.CommandID, Status: "completed", DryRun: req.DryRun}, nil
 }
 
+func (fakeService) SetStarGiftSupply(_ context.Context, req admin.SetStarGiftSupplyRequest) (admin.CommandResult, error) {
+	return admin.CommandResult{CommandID: req.CommandID, Status: "completed", DryRun: req.DryRun}, nil
+}
+
 func (fakeService) DeleteStarGift(_ context.Context, req admin.DeleteStarGiftRequest) (admin.CommandResult, error) {
 	return admin.CommandResult{CommandID: req.CommandID, Status: "completed", DryRun: req.DryRun}, nil
 }

@@ -409,6 +409,50 @@ WHERE gift_id=$1 AND sort_order IS DISTINCT FROM $2`, giftID, sortOrder)
 	return false, nil
 }
 
+// SetCatalogSupply edits the "X of Y sold" cap on the gift's current active
+// revision in place -- see the store.StarGiftStore interface doc comment for
+// why this doesn't mint a new revision the way CreateCatalogRevision does.
+func (s *StarGiftStore) SetCatalogSupply(ctx context.Context, giftID int64, limited bool, total, issued int) (bool, error) {
+	if giftID <= 0 || total < 0 || issued < 0 || issued > total || (limited && total <= 0) {
+		return false, domain.ErrStarGiftInvalid
+	}
+	var changed bool
+	err := withTx(ctx, s.db, "set star gift supply", func(tx pgx.Tx) error {
+		var activeRevisionID int64
+		if err := tx.QueryRow(ctx, `SELECT active_revision_id FROM star_gift_catalog WHERE gift_id=$1 FOR UPDATE`, giftID).
+			Scan(&activeRevisionID); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return domain.ErrStarGiftNotFound
+			}
+			return fmt.Errorf("lock star gift for supply edit: %w", err)
+		}
+		remains, soldOut := 0, false
+		if limited {
+			remains = total - issued
+			soldOut = remains <= 0
+		}
+		revTag, err := tx.Exec(ctx, `
+UPDATE star_gift_catalog_revisions SET limited=$2, availability_total=$3, sold_out=$4
+WHERE id=$1 AND (limited IS DISTINCT FROM $2 OR availability_total IS DISTINCT FROM $3 OR sold_out IS DISTINCT FROM $4)`,
+			activeRevisionID, limited, total, soldOut)
+		if err != nil {
+			return fmt.Errorf("update star gift revision supply: %w", err)
+		}
+		catTag, err := tx.Exec(ctx, `
+UPDATE star_gift_catalog SET availability_remains=$2, updated_at=now()
+WHERE gift_id=$1 AND availability_remains IS DISTINCT FROM $2`, giftID, remains)
+		if err != nil {
+			return fmt.Errorf("update star gift catalog supply: %w", err)
+		}
+		changed = revTag.RowsAffected() > 0 || catTag.RowsAffected() > 0
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return changed, nil
+}
+
 func (s *StarGiftStore) AnimationJSON(ctx context.Context, giftID int64) ([]byte, bool, error) {
 	var raw []byte
 	err := s.db.QueryRow(ctx, `

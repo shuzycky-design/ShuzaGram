@@ -1,4 +1,4 @@
-import { CheckCircle2, FileJson2, Gem, Loader2, Pause, Play, Plus, RefreshCw, Search, ShieldCheck, Upload, X } from "lucide-react";
+import { CheckCircle2, FileJson2, Gem, Loader2, Pause, Play, Plus, RefreshCw, Search, Settings2, ShieldCheck, Upload, X } from "lucide-react";
 import lottie from "lottie-web/build/player/lottie_light_canvas";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -9,6 +9,7 @@ import { useI18n } from "../i18n";
 import { formatDate, toUnixSeconds } from "../lib/format";
 import type { CommandResult, OfficialStarGiftRow, StarGiftRow } from "../types";
 import { GiftCollectiblesModal } from "./GiftCollectiblesModal";
+import { GiftQuickSettingsModal } from "./GiftQuickSettingsModal";
 
 type OfficialGiftCategory = "all" | "upgrade" | "craft" | "basic";
 
@@ -92,6 +93,7 @@ export function GiftsPage() {
   const [query, setQuery] = useState("");
   const [importOpen, setImportOpen] = useState(false);
   const [collectibleGift, setCollectibleGift] = useState<StarGiftRow | null>(null);
+  const [quickSettingsGift, setQuickSettingsGift] = useState<StarGiftRow | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [importSource, setImportSource] = useState<"official" | "file">("official");
   const [officialGifts, setOfficialGifts] = useState<OfficialStarGiftRow[]>([]);
@@ -396,7 +398,7 @@ export function GiftsPage() {
                 <td>{gift.ReceivedCount}</td>
                 <td><Badge tone={gift.Enabled ? "good" : "neutral"}>{gift.Enabled ? t("common.enabled") : t("common.disabled")}</Badge></td>
                 <td>{formatDate(gift.UpdatedAt)}</td>
-                <td><div className="gift-table-actions"><button className="btn compact-btn collectible-button" type="button" onClick={() => setCollectibleGift(gift)}><Gem size={13} />{t("collectibles.manage")}</button><button className="btn compact-btn" type="button" onClick={() => startRevision(gift)}>{t("gifts.replace")}</button><ActionButton compact tone="neutral" label={gift.Enabled ? t("gifts.disable") : t("gifts.enable")} path="/api/actions/set-gift-enabled" payload={() => ({ gift_id: gift.GiftID, enabled: !gift.Enabled })} onDone={() => void load()} /></div></td>
+                <td><div className="gift-table-actions"><button className="btn compact-btn collectible-button" type="button" onClick={() => setCollectibleGift(gift)}><Gem size={13} />{t("collectibles.manage")}</button><button className="btn compact-btn" type="button" onClick={() => startRevision(gift)}>{t("gifts.replace")}</button><button className="btn compact-btn" type="button" onClick={() => setQuickSettingsGift(gift)}><Settings2 size={13} />{t("gifts.quickSettings.eyebrow")}</button><ActionButton compact tone="neutral" label={gift.Enabled ? t("gifts.disable") : t("gifts.enable")} path="/api/actions/set-gift-enabled" payload={() => ({ gift_id: gift.GiftID, enabled: !gift.Enabled })} onDone={() => void load()} /></div></td>
               </tr>
             ))}
             {visibleGifts.length === 0 && <EmptyRow colSpan={9} />}
@@ -539,6 +541,7 @@ export function GiftsPage() {
         document.body
       )}
       {collectibleGift && <GiftCollectiblesModal gift={collectibleGift} onClose={() => setCollectibleGift(null)} onPublished={() => void load()} />}
+      {quickSettingsGift && <GiftQuickSettingsModal gift={quickSettingsGift} onClose={() => setQuickSettingsGift(null)} onChanged={() => void load()} />}
     </PageFrame>
   );
 }

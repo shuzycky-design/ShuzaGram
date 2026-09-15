@@ -169,6 +169,7 @@ func (s *server) routes() http.Handler {
 	mux.Handle("POST /api/actions/set-gift-enabled", s.requireAuthAPI(http.HandlerFunc(s.handleSetStarGiftEnabledAPI)))
 	mux.Handle("POST /api/actions/set-gift-sort-order", s.requireAuthAPI(http.HandlerFunc(s.handleSetStarGiftSortOrderAPI)))
 	mux.Handle("POST /api/actions/give-gift", s.requireAuthAPI(http.HandlerFunc(s.handleGiveGiftAPI)))
+	mux.Handle("POST /api/actions/set-gift-supply", s.requireAuthAPI(http.HandlerFunc(s.handleSetStarGiftSupplyAPI)))
 	mux.Handle("POST /api/actions/delete-gift", s.requireAuthAPI(http.HandlerFunc(s.handleDeleteStarGiftAPI)))
 	mux.Handle("POST /api/actions/mint-collectible-username", s.requireAuthAPI(http.HandlerFunc(s.handleMintCollectibleUsernameAPI)))
 	mux.Handle("POST /api/actions/mint-collectible-phone", s.requireAuthAPI(http.HandlerFunc(s.handleMintCollectiblePhoneAPI)))
@@ -2427,6 +2428,30 @@ func (s *server) handleSetStarGiftSortOrderAPI(w http.ResponseWriter, r *http.Re
 		GiftID:      body.GiftID, SortOrder: body.SortOrder,
 	}
 	result, err := s.callAdminAPI(r.Context(), "/v1/gifts/set-sort-order", req)
+	writeCommandResultAPI(w, result, err)
+}
+
+type setStarGiftSupplyAPIRequest struct {
+	CommandID          string `json:"command_id"`
+	Reason             string `json:"reason"`
+	Confirm            bool   `json:"confirm"`
+	GiftID             int64  `json:"gift_id,string"`
+	Limited            bool   `json:"limited"`
+	AvailabilityTotal  int    `json:"availability_total"`
+	AvailabilityIssued int    `json:"availability_issued"`
+}
+
+func (s *server) handleSetStarGiftSupplyAPI(w http.ResponseWriter, r *http.Request) {
+	var body setStarGiftSupplyAPIRequest
+	if !decodeAction(w, r, &body) {
+		return
+	}
+	req := admin.SetStarGiftSupplyRequest{
+		CommandMeta: s.commandMetaFromAPI(r, body.CommandID, body.Reason, body.Confirm, "set-gift-supply"),
+		GiftID:      body.GiftID, Limited: body.Limited,
+		AvailabilityTotal: body.AvailabilityTotal, AvailabilityIssued: body.AvailabilityIssued,
+	}
+	result, err := s.callAdminAPI(r.Context(), "/v1/gifts/set-supply", req)
 	writeCommandResultAPI(w, result, err)
 }
 

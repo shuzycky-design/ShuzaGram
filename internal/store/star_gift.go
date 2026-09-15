@@ -21,6 +21,13 @@ type StarGiftStore interface {
 	CreateCatalogBundle(ctx context.Context, write domain.StarGiftCatalogBundleWrite) (domain.StarGiftCatalogBundleResult, error)
 	SetCatalogEnabled(ctx context.Context, giftID int64, enabled bool) (bool, error)
 	SetCatalogSortOrder(ctx context.Context, giftID int64, sortOrder int) (bool, error)
+	// SetCatalogSupply is a lightweight "X of Y sold" edit on the gift's current
+	// active revision -- unlike CreateCatalogRevision, it does not mint a new
+	// revision (title/price/etc. are untouched); it exists for the admin panel's
+	// quick per-gift settings, where operators tweak a cap/remaining count often
+	// and a fresh immutable revision per tweak would be churn, not history worth
+	// keeping. limited=false clears the cap entirely (unlimited sale).
+	SetCatalogSupply(ctx context.Context, giftID int64, limited bool, total, issued int) (bool, error)
 	// AnimationJSON 返回当前版本的规范化 Lottie JSON，供管理后台安全预览。
 	AnimationJSON(ctx context.Context, giftID int64) ([]byte, bool, error)
 	// PublishCollectibleRevision validates and atomically publishes a new immutable attribute pool.

@@ -274,6 +274,32 @@ func (s *StarGiftStore) SetCatalogSortOrder(_ context.Context, giftID int64, sor
 	return changed, nil
 }
 
+func (s *StarGiftStore) SetCatalogSupply(_ context.Context, giftID int64, limited bool, total, issued int) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	gift, ok := s.catalog[giftID]
+	if !ok {
+		return false, domain.ErrStarGiftNotFound
+	}
+	if total < 0 || issued < 0 || issued > total || (limited && total <= 0) {
+		return false, domain.ErrStarGiftInvalid
+	}
+	remains, soldOut := 0, false
+	if limited {
+		remains = total - issued
+		soldOut = remains <= 0
+	}
+	changed := gift.Limited != limited || gift.AvailabilityTotal != total ||
+		gift.AvailabilityRemains != remains || gift.SoldOut != soldOut
+	gift.Limited, gift.AvailabilityTotal, gift.AvailabilityRemains, gift.SoldOut = limited, total, remains, soldOut
+	s.catalog[giftID] = gift
+	if rev, ok := s.revisions[gift.RevisionID]; ok {
+		rev.Limited, rev.AvailabilityTotal, rev.AvailabilityRemains, rev.SoldOut = limited, total, remains, soldOut
+		s.revisions[gift.RevisionID] = rev
+	}
+	return changed, nil
+}
+
 func (s *StarGiftStore) AnimationJSON(_ context.Context, giftID int64) ([]byte, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

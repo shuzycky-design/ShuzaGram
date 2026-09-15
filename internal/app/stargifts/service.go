@@ -324,6 +324,15 @@ func (s *Service) SetCatalogSortOrder(ctx context.Context, giftID int64, sortOrd
 	return changed, err
 }
 
+// SetCatalogSupply -- see store.StarGiftStore.SetCatalogSupply.
+func (s *Service) SetCatalogSupply(ctx context.Context, giftID int64, limited bool, total, issued int) (bool, error) {
+	changed, err := s.store.SetCatalogSupply(ctx, giftID, limited, total, issued)
+	if err == nil {
+		s.InvalidateStarGiftCatalog()
+	}
+	return changed, err
+}
+
 func (s *Service) AnimationJSON(ctx context.Context, giftID int64) ([]byte, bool, error) {
 	return s.store.AnimationJSON(ctx, giftID)
 }
