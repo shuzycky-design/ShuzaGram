@@ -102,6 +102,7 @@ export function GiftsPage() {
   const [upgradeStars, setUpgradeStars] = useState("0");
   const [supplyTotal, setSupplyTotal] = useState("0");
   const [slugPrefix, setSlugPrefix] = useState("");
+  const [collectiblePublishAt, setCollectiblePublishAt] = useState(""); // datetime-local; "" = publish with the gift immediately
 	const [giftID, setGiftID] = useState("0");
   const [title, setTitle] = useState("");
   const [stars, setStars] = useState("50");
@@ -304,6 +305,7 @@ export function GiftsPage() {
 		stars, convert_stars: convertStars, enabled, sort_order: Number(sortOrder),
 		include_collectible: includeCollectible, upgrade_stars: upgradeStars,
       supply_total: includeCollectible ? Number(supplyTotal) : 0, slug_prefix: slugPrefix.trim().toLowerCase(),
+      collectible_publish_at: includeCollectible && collectiblePublishAt ? toUnixSeconds(collectiblePublishAt) : 0,
       released_by_username: releasedByUsername.trim(),
       ...lifecyclePayload(),
       ...limitedPayload()
@@ -467,6 +469,7 @@ export function GiftsPage() {
                     <label><span>{t("collectibles.upgradeStars")}</span><input type="number" min="1" value={upgradeStars} onChange={(e) => { setUpgradeStars(e.target.value); setPreview(null); }} /></label>
                     <label><span>{t("collectibles.supply")}</span><input type="number" min="1" value={supplyTotal} placeholder={t("collectibles.supplyPlaceholder")} onChange={(e) => { setSupplyTotal(e.target.value); setPreview(null); }} /></label>
                     <label><span>{t("collectibles.slug")}</span><input value={slugPrefix} maxLength={48} onChange={(e) => { setSlugPrefix(e.target.value.toLowerCase()); setPreview(null); }} /></label>
+                    <label className="collectible-publish-at"><span>{t("collectibles.publishAt")}</span><input type="datetime-local" value={collectiblePublishAt} onChange={(e) => { setCollectiblePublishAt(e.target.value); setPreview(null); }} /><em>{t("collectibles.publishAtHint")}</em></label>
                   </div>}
                   {includeCollectible && <div className="gift-import-note"><span>{t("gifts.officialSupplyHint")}</span></div>}
                 </>}

@@ -2252,6 +2252,10 @@ type importOfficialStarGiftAPIRequest struct {
 	// Unix seconds at which the imported gift becomes purchasable. Zero keeps the
 	// snapshot's own release time.
 	LockedUntilDate int `json:"locked_until_date"`
+	// Unix seconds at which the collectible pool opens; zero publishes it
+	// immediately alongside the plain gift. Distinct from LockedUntilDate
+	// above -- see admin.ImportOfficialStarGiftRequest.CollectiblePublishAt.
+	CollectiblePublishAt int64 `json:"collectible_publish_at"`
 
 	// Auction*/Limited/AvailabilityTotal/AvailabilityIssued/ReleasedByUsername
 	// mirror admin.ImportOfficialStarGiftRequest's own fields of the same
@@ -2287,7 +2291,7 @@ func (s *server) handleImportOfficialStarGiftAPI(w http.ResponseWriter, r *http.
 		Stars: body.Stars, ConvertStars: body.ConvertStars, Enabled: body.Enabled, SortOrder: body.SortOrder,
 		IncludeCollectible: body.IncludeCollectible, UpgradeStars: body.UpgradeStars,
 		SupplyTotal: body.SupplyTotal, SlugPrefix: body.SlugPrefix,
-		LockedUntilDate: body.LockedUntilDate,
+		LockedUntilDate: body.LockedUntilDate, CollectiblePublishAt: body.CollectiblePublishAt,
 
 		Auction: body.Auction, AuctionSlug: body.AuctionSlug, GiftsPerRound: body.GiftsPerRound,
 		AuctionStartDate: body.AuctionStartDate, AuctionRoundDuration: body.AuctionRoundDuration,

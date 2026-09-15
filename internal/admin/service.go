@@ -874,6 +874,14 @@ type ImportOfficialStarGiftRequest struct {
 	UpgradeStars       int64  `json:"upgrade_stars,omitempty"`
 	SupplyTotal        int    `json:"supply_total,omitempty"`
 	SlugPrefix         string `json:"slug_prefix,omitempty"`
+	// CollectiblePublishAt (Unix seconds) is a deferred drop for the official
+	// pack's own collectible pool -- see domain.StarGiftCollectibleWrite.
+	// PublishAt. Zero (default) publishes it immediately alongside the plain
+	// gift, as before this field existed. Ignored unless IncludeCollectible.
+	// Distinct from LockedUntilDate below: that one delays the plain gift
+	// itself becoming purchasable; this one only delays the collectible
+	// upgrade pool -- the plain gift can go live immediately either way.
+	CollectiblePublishAt int64 `json:"collectible_publish_at,omitempty"`
 	// LockedUntilDate schedules the local release of an imported official gift.
 	// Zero keeps whatever release time the snapshot carries. Validated in
 	// ImportOfficialStarGift, which requires a future timestamp.
@@ -3972,7 +3980,7 @@ func (s *Service) ImportOfficialStarGift(ctx context.Context, req ImportOfficial
 		}
 		collectible = &domain.StarGiftCollectibleWrite{GiftID: req.GiftID, UpgradeStars: req.UpgradeStars,
 			SupplyTotal: req.SupplyTotal, SlugPrefix: req.SlugPrefix, Models: models, Patterns: patterns, Backdrops: backdrops,
-			Actor: req.Actor, CommandID: req.CommandID, OfficialGiftID: sourceID,
+			Actor: req.Actor, CommandID: req.CommandID, OfficialGiftID: sourceID, PublishAt: req.CollectiblePublishAt,
 			SourceManifestSHA256: append([]byte(nil), bundle.ManifestSHA256...)}
 		validation := *collectible
 		if validation.GiftID == 0 {
@@ -4057,6 +4065,7 @@ func (s *Service) ImportOfficialStarGift(ctx context.Context, req ImportOfficial
 				}
 			}
 			details["crafted_models"] = crafted
+			details["collectible_publish_at"] = req.CollectiblePublishAt
 		}
 		if req.DryRun {
 			return CommandResult{Message: "official star gift bundle validated", Details: details}, nil
@@ -4070,11 +4079,16 @@ func (s *Service) ImportOfficialStarGift(ctx context.Context, req ImportOfficial
 		details["limited"] = result.Catalog.Gift.Limited
 		details["availability_total"] = result.Catalog.Gift.AvailabilityTotal
 		details["availability_remains"] = result.Catalog.Gift.AvailabilityRemains
+		message := "official star gift bundle imported"
 		if result.Collectible != nil {
 			details["collectible_revision_id"] = strconv.FormatInt(result.Collectible.ID, 10)
 			details["collectible_revision"] = result.Collectible.Revision
+			details["collectible_published"] = result.Collectible.Published
+			if !result.Collectible.Published {
+				message = "official star gift imported; collectible pool scheduled"
+			}
 		}
-		return CommandResult{Message: "official star gift bundle imported", Details: details}, nil
+		return CommandResult{Message: message, Details: details}, nil
 	})
 }
 

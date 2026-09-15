@@ -989,3 +989,48 @@ func TestStarGiftCollectibleImmediatePublishStillWorksPostgres(t *testing.T) {
 		t.Fatalf("immediately published revision must not also be pending: found=%v err=%v", found, err)
 	}
 }
+
+// TestStarGiftCatalogBundleDeferredDropPostgres exercises the *official-import*
+// path (admin.ImportOfficialStarGift -> CreateCatalogBundle, pulling a real
+// official gift's own collectible attributes) with a scheduled collectible
+// pool -- distinct from the manual-upload PublishCollectibleRevision path the
+// other tests in this file cover. CreateCatalogBundle delegates to the same
+// PublishCollectibleRevision under the hood, but this confirms that wiring
+// end to end rather than assuming it from reading the code.
+func TestStarGiftCatalogBundleDeferredDropPostgres(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	suffix := randomSuffix(t)
+	gifts := NewStarGiftStore(pool)
+	future := time.Now().Add(time.Hour).Unix()
+	baseDocumentID := time.Now().UnixNano() & 0x7ffffffffffff000
+	result, err := gifts.CreateCatalogBundle(ctx, domain.StarGiftCatalogBundleWrite{
+		Catalog: domain.StarGiftCatalogWrite{
+			Title: "Official Comet", Stars: 50, ConvertStars: 25, Enabled: true,
+			Document:  collectibleTestDocument(baseDocumentID, "gift.tgs"),
+			Blob:      collectibleTestBlob(baseDocumentID, "gift"),
+			Animation: collectibleTestAnimation("gift.tgs"),
+			Actor:     "integration", CommandID: "catalog-bundle-sched-" + suffix,
+		},
+		Collectible: func() *domain.StarGiftCollectibleWrite {
+			write := scheduledCollectibleWrite(0, suffix, future) // GiftID filled in by CreateCatalogBundle
+			return &write
+		}(),
+	})
+	if err != nil {
+		t.Fatalf("create official catalog bundle with scheduled collectible: %v", err)
+	}
+	if result.Collectible == nil || result.Collectible.Published {
+		t.Fatalf("official import's collectible pool must not publish immediately when scheduled: %+v", result.Collectible)
+	}
+	giftID := result.Catalog.Gift.ID
+	if _, found, err := gifts.ActiveCollectibleRevision(ctx, giftID); err != nil || found {
+		t.Fatalf("official import's scheduled pool must not be active yet: found=%v err=%v", found, err)
+	}
+	if plain, found, err := gifts.CatalogGift(ctx, giftID); err != nil || !found || plain.UpgradeStars != 0 {
+		t.Fatalf("official import's plain gift must stay non-upgradeable pre-drop: found=%v err=%v gift=%+v", found, err, plain)
+	}
+	if _, found, err := gifts.PendingCollectibleRevision(ctx, giftID); err != nil || !found {
+		t.Fatalf("official import's scheduled pool must be visible as pending: found=%v err=%v", found, err)
+	}
+}

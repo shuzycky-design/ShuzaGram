@@ -143,3 +143,40 @@ func TestActivateDueCollectibleRevisionsMemory(t *testing.T) {
 		t.Fatalf("gift should now be upgradeable: %+v", gift)
 	}
 }
+
+// TestCreateCatalogBundleDeferredDropMemory exercises the *official-import*
+// path (admin.ImportOfficialStarGift, pulling a real official gift + its
+// collectible attributes -- distinct from the manual upload path the other
+// tests in this file cover) with a scheduled collectible pool, to make sure
+// PublishAt is honored there too, not only via the standalone
+// PublishStarGiftCollectibles call.
+func TestCreateCatalogBundleDeferredDropMemory(t *testing.T) {
+	ctx := context.Background()
+	s := NewStarGiftStore()
+	future := time.Now().Add(time.Hour).Unix()
+	result, err := s.CreateCatalogBundle(ctx, domain.StarGiftCatalogBundleWrite{
+		Catalog: domain.StarGiftCatalogWrite{
+			Title: "Official Nebula", Stars: 50, ConvertStars: 25, Enabled: true, OfficialGiftID: 5170000000000000001,
+		},
+		Collectible: func() *domain.StarGiftCollectibleWrite {
+			write := testCollectibleWrite(0, future) // GiftID filled in by CreateCatalogBundle
+			return &write
+		}(),
+	})
+	if err != nil {
+		t.Fatalf("create official catalog bundle with scheduled collectible: %v", err)
+	}
+	if result.Collectible == nil || result.Collectible.Published {
+		t.Fatalf("official import's collectible pool must not publish immediately when scheduled: %+v", result.Collectible)
+	}
+	giftID := result.Catalog.Gift.ID
+	if _, ok, _ := s.ActiveCollectibleRevision(ctx, giftID); ok {
+		t.Fatal("official import's scheduled pool must not be active yet")
+	}
+	if gift, _, _ := s.CatalogGift(ctx, giftID); gift.UpgradeStars != 0 {
+		t.Fatalf("official import's plain gift must stay non-upgradeable pre-drop: %+v", gift)
+	}
+	if _, ok, _ := s.PendingCollectibleRevision(ctx, giftID); !ok {
+		t.Fatal("official import's scheduled pool must be visible as pending")
+	}
+}
