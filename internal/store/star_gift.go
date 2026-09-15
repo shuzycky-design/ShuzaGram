@@ -43,6 +43,17 @@ type StarGiftStore interface {
 	// ahead of a deferred drop (Issued is always 0: nothing can have been upgraded from an
 	// unpublished pool). Never used for upgrade eligibility, only for this pre-drop display.
 	PendingCollectibleAvailability(ctx context.Context, giftIDs []int64) (map[int64]domain.StarGiftCollectibleAvailability, error)
+	// PreviewStarGiftDelete computes what DeleteStarGift would do -- owner counts and
+	// the per-user refund breakdown -- without deleting or crediting anything. Used both
+	// for the admin panel's dry-run preview and to decide who to credit before the real delete.
+	PreviewStarGiftDelete(ctx context.Context, giftID int64) (domain.StarGiftDeleteResult, error)
+	// DeleteStarGift permanently removes a gift and every trace of it: catalog revisions,
+	// its collectible pool (deliberately bypassing the publish-immutability guard -- a DBA-
+	// level purge, not an application mutation the guard exists to stop), and every owner's
+	// instance. It does not credit Stars itself -- that is the caller's job, using the refund
+	// breakdown from PreviewStarGiftDelete, before calling this (so a failed credit aborts
+	// before anything is destroyed rather than after).
+	DeleteStarGift(ctx context.Context, giftID int64) (domain.StarGiftDeleteResult, error)
 	CollectibleAnimationJSON(ctx context.Context, giftID int64, kind domain.StarGiftCollectibleAttributeKind, attributeID int64) ([]byte, bool, error)
 	UniqueBySlug(ctx context.Context, slug string) (domain.UniqueStarGift, bool, error)
 	UniqueByID(ctx context.Context, uniqueGiftID int64) (domain.UniqueStarGift, bool, error)

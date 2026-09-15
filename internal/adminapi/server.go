@@ -84,6 +84,7 @@ type Service interface {
 	OfficialStarGifts(ctx context.Context) ([]officialgifts.GiftSummary, error)
 	OfficialStarGiftAnimation(ctx context.Context, sourceGiftID string) ([]byte, bool, error)
 	PublishStarGiftCollectibles(ctx context.Context, req admin.PublishStarGiftCollectiblesRequest) (admin.CommandResult, error)
+	DeleteStarGift(ctx context.Context, req admin.DeleteStarGiftRequest) (admin.CommandResult, error)
 	SetStarGiftEnabled(ctx context.Context, req admin.SetStarGiftEnabledRequest) (admin.CommandResult, error)
 	SetStarGiftSortOrder(ctx context.Context, req admin.SetStarGiftSortOrderRequest) (admin.CommandResult, error)
 	GiveGift(ctx context.Context, req admin.GiveGiftRequest) (admin.CommandResult, error)
@@ -277,6 +278,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /v1/gifts/set-enabled", s.authenticated(s.handleSetStarGiftEnabled))
 	mux.HandleFunc("POST /v1/gifts/set-sort-order", s.authenticated(s.handleSetStarGiftSortOrder))
 	mux.HandleFunc("POST /v1/gifts/give", s.authenticated(s.handleGiveGift))
+	mux.HandleFunc("POST /v1/gifts/delete", s.authenticated(s.handleDeleteStarGift))
 	mux.HandleFunc("GET /v1/gifts/{id}/animation", s.authenticated(s.handleStarGiftAnimation))
 	mux.HandleFunc("GET /v1/emoji/{id}/animation", s.authenticated(s.handleEmojiAnimation))
 	mux.HandleFunc("GET /v1/gif-catalog", s.authenticated(s.handleGifCatalog))
@@ -1160,6 +1162,15 @@ func (s *Server) handleSetStarGiftSortOrder(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	result, err := s.svc.SetStarGiftSortOrder(r.Context(), req)
+	writeCommandResult(w, result, err)
+}
+
+func (s *Server) handleDeleteStarGift(w http.ResponseWriter, r *http.Request) {
+	var req admin.DeleteStarGiftRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	result, err := s.svc.DeleteStarGift(r.Context(), req)
 	writeCommandResult(w, result, err)
 }
 

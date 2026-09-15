@@ -57,6 +57,7 @@ const (
 	ActionSetStarGiftEnabled      = "gifts.set_enabled"
 	ActionSetStarGiftSortOrder    = "gifts.set_sort_order"
 	ActionGiveGift                = "gifts.give"
+	ActionDeleteStarGift          = "gifts.delete"
 	ActionCreateBot               = "bot.create"
 	ActionCreateBroadcast         = "broadcast.create"
 	ActionSetStickerSetArchived   = "stickers.set_archived"
@@ -347,6 +348,10 @@ type GiftsService interface {
 	// PendingCollectible surfaces a not-yet-live scheduled collectible drop -- see
 	// internal/app/stargifts.Service.PendingCollectible.
 	PendingCollectible(ctx context.Context, giftID int64) (domain.StarGiftCollectibleRevision, bool, error)
+	// PreviewDeleteStarGift/DeleteStarGift -- see internal/app/stargifts.Service's
+	// methods of the same name.
+	PreviewDeleteStarGift(ctx context.Context, giftID int64) (domain.StarGiftDeleteResult, error)
+	DeleteStarGift(ctx context.Context, giftID int64) (domain.StarGiftDeleteResult, error)
 }
 
 type OfficialGiftsSource interface {
@@ -4298,6 +4303,70 @@ func (s *Service) SetStarGiftSortOrder(ctx context.Context, req SetStarGiftSortO
 		changed, err := s.gifts.SetCatalogSortOrder(ctx, req.GiftID, req.SortOrder)
 		details["changed"] = changed
 		return CommandResult{Message: "star gift order updated", Details: details}, err
+	})
+}
+
+type DeleteStarGiftRequest struct {
+	CommandMeta
+	GiftID int64 `json:"gift_id"`
+	// RefundStars credits each user owner the Stars they actually paid (purchase
+	// price plus, if already upgraded, the collectible upgrade price -- see
+	// domain.StarGiftOwnerRefund) before revoking their instance. Without it,
+	// owners simply lose the gift with no compensation.
+	RefundStars bool `json:"refund_stars"`
+}
+
+// DeleteStarGift permanently removes a gift -- catalog, collectible pool, and
+// every owner's instance -- unlike SetStarGiftEnabled, which only hides it.
+// Refuses to run if the preview finds active secondary-market/administrative
+// state (see domain.StarGiftDeleteResult.Blockers); resolve that first, then
+// retry. When RefundStars is set, Stars are credited before anything is
+// deleted, so a failed credit aborts the whole command instead of confiscating
+// a gift the admin promised to pay for.
+func (s *Service) DeleteStarGift(ctx context.Context, req DeleteStarGiftRequest) (CommandResult, error) {
+	if s == nil || s.gifts == nil || s.stars == nil || req.GiftID <= 0 {
+		return CommandResult{}, fmt.Errorf("valid star gift, stars and service are required")
+	}
+	return s.runCommand(ctx, req.CommandMeta, ActionDeleteStarGift, 0, domain.Peer{}, req, func() (CommandResult, error) {
+		preview, err := s.gifts.PreviewDeleteStarGift(ctx, req.GiftID)
+		if err != nil {
+			return CommandResult{}, err
+		}
+		details := map[string]any{
+			"gift_id": strconv.FormatInt(req.GiftID, 10), "title": preview.Title,
+			"owners": preview.Owners, "unique_owners": preview.UniqueOwners,
+			"refund_requested": req.RefundStars, "refund_eligible_users": len(preview.Refunds),
+			"refund_total_stars": strconv.FormatInt(preview.RefundTotal(), 10),
+		}
+		if len(preview.Blockers) > 0 {
+			details["blockers"] = preview.Blockers
+			return CommandResult{Details: details}, domain.ErrStarGiftDeleteBlocked
+		}
+		if req.DryRun {
+			return CommandResult{Message: "star gift deletion validated", Details: details}, nil
+		}
+		if req.RefundStars {
+			refunded := 0
+			for _, refund := range preview.Refunds {
+				if refund.Total() <= 0 {
+					continue
+				}
+				if _, err := s.stars.Credit(ctx, refund.UserID, refund.Total(), domain.StarsReasonAdjust, domain.Peer{},
+					"Gift removed by admin", "refund for "+preview.Title); err != nil {
+					details["refunded_users_before_failure"] = refunded
+					return CommandResult{Details: details}, fmt.Errorf("credit refund to user %d: %w", refund.UserID, err)
+				}
+				refunded++
+			}
+			details["refunded_users"] = refunded
+		}
+		result, err := s.gifts.DeleteStarGift(ctx, req.GiftID)
+		if err != nil {
+			return CommandResult{Details: details}, err
+		}
+		details["owners_revoked"] = result.Owners
+		details["unique_owners_revoked"] = result.UniqueOwners
+		return CommandResult{Message: "star gift deleted", Details: details}, nil
 	})
 }
 

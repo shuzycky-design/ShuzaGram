@@ -1584,6 +1584,7 @@ func (f *fakeOfficialGiftsSource) Bundle(_ context.Context, giftID int64, includ
 
 type fakeGiftsService struct {
 	createCalls int
+	deleteCalls int
 	lastBundle  domain.StarGiftCatalogBundleWrite
 }
 
@@ -1639,6 +1640,13 @@ func (*fakeGiftsService) CollectibleAnimationJSON(context.Context, int64, domain
 }
 func (*fakeGiftsService) PendingCollectible(context.Context, int64) (domain.StarGiftCollectibleRevision, bool, error) {
 	return domain.StarGiftCollectibleRevision{}, false, nil
+}
+func (f *fakeGiftsService) PreviewDeleteStarGift(_ context.Context, giftID int64) (domain.StarGiftDeleteResult, error) {
+	return domain.StarGiftDeleteResult{GiftID: giftID}, nil
+}
+func (f *fakeGiftsService) DeleteStarGift(_ context.Context, giftID int64) (domain.StarGiftDeleteResult, error) {
+	f.deleteCalls++
+	return domain.StarGiftDeleteResult{GiftID: giftID}, nil
 }
 
 func (f *fakeChannelNotifier) NotifyChannelChanged(_ context.Context, ch domain.Channel) error {

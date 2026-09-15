@@ -213,6 +213,55 @@ type StarGiftCollectibleWrite struct {
 	SourceManifestSHA256 []byte
 }
 
+// StarGiftOwnerRefund is one user owner's would-be (preview) or actually-
+// credited (after delete) Stars compensation for a hard-deleted gift: what
+// they originally paid to buy the plain gift plus, if they had already
+// upgraded it, what they paid for the collectible upgrade. Sourced from
+// star_gift_purchase_commands/star_gift_upgrade_commands' own charge_stars
+// (the actual amount charged), not the catalog's current price. Channel
+// owners never appear here -- channels hold no Stars balance in this model,
+// so their instances are simply revoked with no possible refund.
+type StarGiftOwnerRefund struct {
+	UserID        int64
+	PurchaseStars int64
+	UpgradeStars  int64
+}
+
+func (r StarGiftOwnerRefund) Total() int64 { return r.PurchaseStars + r.UpgradeStars }
+
+// StarGiftDeleteResult summarizes an admin hard-delete of a gift (or, from
+// PreviewStarGiftDelete, what such a delete would do): every owner loses
+// their instance, whether or not RefundStars was requested -- there is no
+// "delete except leave some copies" mode. UniqueOwners is the subset of
+// Owners already upgraded to the collectible/unique version; Refunds lists
+// only user (not channel) owners, since crediting a channel isn't possible.
+//
+// Blockers lists secondary-market/administrative state this deletion
+// deliberately refuses to touch automatically -- an active resale listing,
+// pending offer, in-flight craft, auction, withdrawal, transfer, admin
+// grant, or a user's collectible emoji status can all involve people and
+// commitments beyond the gift's own owners, so cascading through them
+// silently risks real inconsistency elsewhere. A non-empty Blockers means
+// DeleteStarGift will refuse to run; resolve the listed state through its
+// own normal admin/user flow first, then retry.
+type StarGiftDeleteResult struct {
+	GiftID       int64
+	Title        string
+	Owners       int
+	UniqueOwners int
+	Refunds      []StarGiftOwnerRefund
+	Blockers     map[string]int
+}
+
+// RefundTotal sums every owner's refund, whether or not it was actually credited.
+func (r StarGiftDeleteResult) RefundTotal() int64 {
+	var total int64
+	for _, refund := range r.Refunds {
+		total += refund.Total()
+	}
+	return total
+}
+
 // UniqueStarGift 是一份已经发行的唯一礼物。属性、编号与 slug 一经创建永久不变。
 type UniqueStarGift struct {
 	ID                      int64
@@ -1170,7 +1219,10 @@ var (
 	// ErrStarGiftNotFound 表示找不到该已收到礼物实例。
 	ErrStarGiftNotFound = errors.New("stargift: saved gift not found")
 	// ErrStarGiftAlreadyConverted 表示礼物已转换回 Stars（不可重复转换）。
-	ErrStarGiftAlreadyConverted            = errors.New("stargift: already converted")
+	ErrStarGiftAlreadyConverted = errors.New("stargift: already converted")
+	// ErrStarGiftDeleteBlocked means DeleteStarGift refused to run because
+	// StarGiftDeleteResult.Blockers is non-empty -- see that field's doc comment.
+	ErrStarGiftDeleteBlocked               = errors.New("stargift: delete blocked by active marketplace/administrative state")
 	ErrStarGiftFileInvalid                 = errors.New("stargift: invalid animation file")
 	ErrStarGiftCatalogFull                 = errors.New("stargift: catalog full")
 	ErrStarGiftLifecycleInvalid            = errors.New("stargift: invalid auction or scheduled-release parameters")

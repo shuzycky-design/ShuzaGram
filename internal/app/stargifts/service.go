@@ -505,6 +505,28 @@ func (s *Service) PendingCollectible(ctx context.Context, giftID int64) (domain.
 	return s.store.PendingCollectibleRevision(ctx, giftID)
 }
 
+// PreviewDeleteStarGift reports what DeleteStarGift would do -- see the store method's doc comment.
+func (s *Service) PreviewDeleteStarGift(ctx context.Context, giftID int64) (domain.StarGiftDeleteResult, error) {
+	if s == nil || s.store == nil {
+		return domain.StarGiftDeleteResult{}, fmt.Errorf("star gift store is not configured")
+	}
+	return s.store.PreviewStarGiftDelete(ctx, giftID)
+}
+
+// DeleteStarGift permanently deletes a gift and revokes every owner's instance -- see the
+// store method's doc comment. Does not credit Stars; callers wanting a refund must do so
+// themselves (via PreviewDeleteStarGift's breakdown) before calling this.
+func (s *Service) DeleteStarGift(ctx context.Context, giftID int64) (domain.StarGiftDeleteResult, error) {
+	if s == nil || s.store == nil {
+		return domain.StarGiftDeleteResult{}, fmt.Errorf("star gift store is not configured")
+	}
+	result, err := s.store.DeleteStarGift(ctx, giftID)
+	if err == nil {
+		s.InvalidateStarGiftCatalog()
+	}
+	return result, err
+}
+
 // ActivateDueCollectibleRevisions publishes every scheduled collectible drop whose time has
 // come. Called by CollectibleDropDispatcher, not request handlers.
 func (s *Service) ActivateDueCollectibleRevisions(ctx context.Context) ([]int64, error) {

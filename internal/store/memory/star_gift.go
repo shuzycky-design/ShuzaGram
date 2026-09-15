@@ -83,6 +83,78 @@ func (s *StarGiftStore) Catalog(_ context.Context) ([]domain.StarGift, error) {
 	return out, nil
 }
 
+// PreviewStarGiftDelete and DeleteStarGift model no marketplace/craft/
+// auction/admin-grant state at all (this fake never tracks it), so
+// StarGiftDeleteResult.Blockers is always empty here -- unlike Postgres,
+// there is nothing for them to find.
+func (s *StarGiftStore) PreviewStarGiftDelete(_ context.Context, giftID int64) (domain.StarGiftDeleteResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.previewStarGiftDeleteLocked(giftID)
+}
+
+func (s *StarGiftStore) previewStarGiftDeleteLocked(giftID int64) (domain.StarGiftDeleteResult, error) {
+	gift, ok := s.catalog[giftID]
+	if !ok {
+		return domain.StarGiftDeleteResult{}, domain.ErrStarGiftNotFound
+	}
+	result := domain.StarGiftDeleteResult{GiftID: giftID, Title: gift.Title}
+	for _, g := range s.gifts {
+		if g.GiftID != giftID || !g.LifecycleStatus.Live() {
+			continue
+		}
+		result.Owners++
+		if g.UniqueGiftID != 0 {
+			result.UniqueOwners++
+		}
+		if g.Owner.Type != domain.PeerTypeUser {
+			continue
+		}
+		purchase := g.PaidStars
+		if purchase <= 0 {
+			purchase = gift.Stars
+		}
+		var upgrade int64
+		if g.UniqueGiftID != 0 {
+			upgrade = gift.UpgradeStars
+		}
+		if purchase > 0 || upgrade > 0 {
+			result.Refunds = append(result.Refunds, domain.StarGiftOwnerRefund{
+				UserID: g.Owner.ID, PurchaseStars: purchase, UpgradeStars: upgrade,
+			})
+		}
+	}
+	return result, nil
+}
+
+func (s *StarGiftStore) DeleteStarGift(_ context.Context, giftID int64) (domain.StarGiftDeleteResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	result, err := s.previewStarGiftDeleteLocked(giftID)
+	if err != nil {
+		return domain.StarGiftDeleteResult{}, err
+	}
+	remaining := s.gifts[:0:0]
+	for _, g := range s.gifts {
+		if g.GiftID != giftID {
+			remaining = append(remaining, g)
+		}
+	}
+	s.gifts = remaining
+	for revID, rev := range s.revisions {
+		if rev.ID == giftID {
+			delete(s.revisions, revID)
+		}
+	}
+	delete(s.catalog, giftID)
+	delete(s.enabled, giftID)
+	delete(s.sortOrder, giftID)
+	delete(s.animations, giftID)
+	delete(s.collectibles, giftID)
+	delete(s.pendingCollectibles, giftID)
+	return result, nil
+}
+
 func (s *StarGiftStore) CatalogGift(_ context.Context, giftID int64) (domain.StarGift, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

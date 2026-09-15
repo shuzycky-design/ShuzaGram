@@ -169,6 +169,7 @@ func (s *server) routes() http.Handler {
 	mux.Handle("POST /api/actions/set-gift-enabled", s.requireAuthAPI(http.HandlerFunc(s.handleSetStarGiftEnabledAPI)))
 	mux.Handle("POST /api/actions/set-gift-sort-order", s.requireAuthAPI(http.HandlerFunc(s.handleSetStarGiftSortOrderAPI)))
 	mux.Handle("POST /api/actions/give-gift", s.requireAuthAPI(http.HandlerFunc(s.handleGiveGiftAPI)))
+	mux.Handle("POST /api/actions/delete-gift", s.requireAuthAPI(http.HandlerFunc(s.handleDeleteStarGiftAPI)))
 	mux.Handle("POST /api/actions/mint-collectible-username", s.requireAuthAPI(http.HandlerFunc(s.handleMintCollectibleUsernameAPI)))
 	mux.Handle("POST /api/actions/mint-collectible-phone", s.requireAuthAPI(http.HandlerFunc(s.handleMintCollectiblePhoneAPI)))
 	mux.Handle("POST /api/actions/update-collectible-phone-price", s.requireAuthAPI(http.HandlerFunc(s.handleUpdateCollectiblePhonePriceAPI)))
@@ -2426,6 +2427,27 @@ func (s *server) handleSetStarGiftSortOrderAPI(w http.ResponseWriter, r *http.Re
 		GiftID:      body.GiftID, SortOrder: body.SortOrder,
 	}
 	result, err := s.callAdminAPI(r.Context(), "/v1/gifts/set-sort-order", req)
+	writeCommandResultAPI(w, result, err)
+}
+
+type deleteStarGiftAPIRequest struct {
+	CommandID   string `json:"command_id"`
+	Reason      string `json:"reason"`
+	Confirm     bool   `json:"confirm"`
+	GiftID      int64  `json:"gift_id,string"`
+	RefundStars bool   `json:"refund_stars"`
+}
+
+func (s *server) handleDeleteStarGiftAPI(w http.ResponseWriter, r *http.Request) {
+	var body deleteStarGiftAPIRequest
+	if !decodeAction(w, r, &body) {
+		return
+	}
+	req := admin.DeleteStarGiftRequest{
+		CommandMeta: s.commandMetaFromAPI(r, body.CommandID, body.Reason, body.Confirm, "delete-gift"),
+		GiftID:      body.GiftID, RefundStars: body.RefundStars,
+	}
+	result, err := s.callAdminAPI(r.Context(), "/v1/gifts/delete", req)
 	writeCommandResultAPI(w, result, err)
 }
 
