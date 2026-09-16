@@ -98,40 +98,51 @@ func (r *Router) viewerIsPremiumForPrivacy(ctx context.Context, viewerUserID int
 	return premium, nil
 }
 
+// ensurePrivateContactAllowed resolves whether senderUserID may message
+// recipientUserID right now and, if the recipient requires paid messages,
+// returns the exact total to charge (messageCount lets one authorization
+// cover a multi-message send, e.g. an album). A returned amount of 0 means
+// the message is free -- either because the pair is exempt (contacts, an
+// explicit PrivacyKeyNoPaidMessages allowance, or one of them being the
+// other) or because the recipient's requirement is the premium-account gate
+// instead of a Stars price.
+//
+// The caller must attach the returned amount to the outgoing
+// domain.SendPrivateTextRequest.PaidStars unchanged, so the store debits
+// exactly what this function authorized, atomically with the send itself
+// (see debitPrivatePaidMessage) -- this function only ever reads state, it
+// never charges anything on its own.
 func (r *Router) ensurePrivateContactAllowed(
 	ctx context.Context,
 	senderUserID, recipientUserID, allowPaidStars int64,
 	messageCount int,
-) error {
+) (int64, error) {
 	if allowPaidStars < 0 || messageCount < 1 {
-		return starsAmountInvalidErr()
+		return 0, starsAmountInvalidErr()
 	}
 	requirement, err := r.privateContactRestrictionFor(ctx, senderUserID, recipientUserID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if requirement.requirePremium {
 		premium, err := r.viewerIsPremiumForPrivacy(ctx, senderUserID)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		if !premium {
-			return premiumAccountRequiredErr()
+			return 0, premiumAccountRequiredErr()
 		}
-		return nil
+		return 0, nil
 	}
 	if requirement.paidStars <= 0 {
-		return nil
+		return 0, nil
 	}
 	if requirement.paidStars > math.MaxInt64/int64(messageCount) {
-		return starsAmountInvalidErr()
+		return 0, starsAmountInvalidErr()
 	}
 	required := requirement.paidStars * int64(messageCount)
 	if allowPaidStars < required {
-		return allowPaymentRequiredErr(required)
+		return 0, allowPaymentRequiredErr(required)
 	}
-	// The privacy gate and no-paid exception are complete here. The separate
-	// private paid-message ledger is not part of the current message store yet;
-	// never accept an authorization without an atomic debit.
-	return paymentUnsupportedErr()
+	return required, nil
 }

@@ -363,6 +363,16 @@ type SendPrivateTextRequest struct {
 	ReplyMarkup *MessageReplyMarkup
 	// RichMessage 是 Layer 228 富文本消息（richMessage）快照，可选；普通消息恒 nil。
 	RichMessage *MessageRichMessage
+	// PaidStars is the exact amount, already resolved and authorized against
+	// the sender's allow_paid_stars ceiling by the RPC boundary (see
+	// ensurePrivateContactAllowed), to atomically debit from the sender and
+	// credit to the recipient as part of this same send transaction. Zero
+	// means an ordinary, unpaid message -- the overwhelmingly common case,
+	// which also keeps the plain-text hot path available (see
+	// plainPrivateSendHotPath). This is a settlement instruction, not a
+	// persisted message field: it is not written to message_boxes/
+	// private_messages and does not survive to a later history read.
+	PaidStars int64
 }
 
 // HasContent reports whether the command contains a client-visible message payload.

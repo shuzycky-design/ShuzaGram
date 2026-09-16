@@ -636,7 +636,14 @@ func applyContactProjection(user domain.User, contact domain.Contact, found bool
 		return user.DeletedTombstone()
 	}
 	if !found {
-		user.Phone = ""
+		// Phone is deliberately left as the base account phone here, not
+		// cleared: a non-contact viewer has no owner-scoped phone override to
+		// apply, but that says nothing about whether they may see the real
+		// account phone at all -- that call belongs solely to applyPrivacy's
+		// PrivacyKeyPhoneNumber check, which runs after this. Clearing it here
+		// meant PrivacyKeyPhoneNumber=allow_all never had any effect for a
+		// non-contact viewer, because nothing downstream ever re-populates a
+		// phone this function already blanked.
 		user.Contact = false
 		user.Mutual = false
 		user.CloseFriend = false

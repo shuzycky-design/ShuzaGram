@@ -300,6 +300,17 @@ func (s *MessageStore) sendPrivateTextOnce(ctx context.Context, req domain.SendP
 			return domain.SendPrivateTextResult{}, err
 		}
 	}
+	if req.PaidStars > 0 {
+		// plainPrivateSendHotPath refuses req.PaidStars != 0, so this always
+		// runs inside the full transaction below, under the same per-user
+		// advisory lock already taken above (lockUsersForUpdate): the debit
+		// and the message it pays for commit or roll back together, and a
+		// concurrent send between the same two users can never interleave
+		// with this balance check.
+		if err := debitPrivatePaidMessage(ctx, tx, req.SenderUserID, req.RecipientUserID, req.PaidStars, req.Date); err != nil {
+			return domain.SendPrivateTextResult{}, err
+		}
+	}
 	if plainHotPath {
 		pm, createErr := createPlainPrivateMessage(ctx, tx, req, requestFingerprint, deliverRecipient)
 		if createErr != nil {

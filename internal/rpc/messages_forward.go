@@ -143,12 +143,21 @@ func (r *Router) onMessagesForwardMessages(ctx context.Context, req *tg.Messages
 	if err != nil {
 		return nil, err
 	}
+	var forwardPaidStarsPerMessage int64
 	if toPeer.Type == domain.PeerTypeUser {
 		if req.AllowPaidFloodskip {
 			return nil, paymentUnsupportedErr()
 		}
-		if err := r.ensurePrivateContactAllowed(ctx, userID, toPeer.ID, req.AllowPaidStars, len(absentIndexes)); err != nil {
+		total, err := r.ensurePrivateContactAllowed(ctx, userID, toPeer.ID, req.AllowPaidStars, len(absentIndexes))
+		if err != nil {
 			return nil, err
+		}
+		// ensurePrivateContactAllowed authorized exactly requirement.paidStars *
+		// len(absentIndexes), so this always divides evenly back to the flat
+		// per-message price; each forwarded message is its own send below and
+		// is charged individually, the same as an unforwarded message would be.
+		if len(absentIndexes) > 0 {
+			forwardPaidStarsPerMessage = total / int64(len(absentIndexes))
 		}
 	}
 	absentIDs := make([]int, len(absentIndexes))
@@ -321,6 +330,7 @@ func (r *Router) onMessagesForwardMessages(ctx context.Context, req *tg.Messages
 				RecipientBlocked:       recipientBlocked,
 				IdempotencyFingerprint: idempotencyFingerprints[i],
 				IdempotencyPreflighted: replays[i].checked,
+				PaidStars:              forwardPaidStarsPerMessage,
 			})
 			if err != nil {
 				return nil, messageForwardErr(err)

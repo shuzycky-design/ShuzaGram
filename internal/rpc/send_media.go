@@ -128,7 +128,8 @@ func (r *Router) sendOutgoing(ctx context.Context, userID int64, peer domain.Pee
 	if r.deps.Messages == nil {
 		return nil, false, peerIDInvalidErr()
 	}
-	if err := r.ensurePrivateContactAllowed(ctx, userID, peer.ID, p.allowPaidStars, 1); err != nil {
+	paidStars, err := r.ensurePrivateContactAllowed(ctx, userID, peer.ID, p.allowPaidStars, 1)
+	if err != nil {
 		return nil, false, err
 	}
 	if err := r.ensureVoiceMessagesAllowed(ctx, userID, peer, p.media != nil && p.media.HasUnreadPayload()); err != nil {
@@ -190,6 +191,7 @@ func (r *Router) sendOutgoing(ctx context.Context, userID int64, peer domain.Pee
 		ViaBotID:               p.viaBotID,
 		GroupedID:              p.groupedID,
 		Effect:                 p.effect,
+		PaidStars:              paidStars,
 	})
 	if err != nil {
 		fields := append(r.contextLogFields(ctx),
@@ -541,7 +543,13 @@ func (r *Router) onMessagesSendMultiMedia(ctx context.Context, req *tg.MessagesS
 		if req.AllowPaidFloodskip {
 			return nil, paymentUnsupportedErr()
 		}
-		if err := r.ensurePrivateContactAllowed(ctx, userID, peer.ID, req.AllowPaidStars, absentCount); err != nil {
+		// Early, upfront validation only: this checks req.AllowPaidStars covers
+		// every item in the album before any of them are sent, so a doomed
+		// multi-send fails immediately rather than partway through. The
+		// actual per-item charge happens inside each item's own sendOutgoing
+		// call below, which re-resolves and re-authorizes for just that one
+		// message -- this discarded amount is never itself attached to a send.
+		if _, err := r.ensurePrivateContactAllowed(ctx, userID, peer.ID, req.AllowPaidStars, absentCount); err != nil {
 			return nil, err
 		}
 	}

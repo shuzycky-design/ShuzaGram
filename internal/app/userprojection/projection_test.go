@@ -230,6 +230,52 @@ func TestProjectorContactWithoutKnownPhoneCannotBypassPhonePrivacy(t *testing.T)
 	}
 }
 
+// TestProjectorNonContactSeesPhoneWhenPrivacyAllowsAll covers the fix for
+// PrivacyKeyPhoneNumber=allow_all having no effect for a non-contact viewer:
+// applyContactProjection used to unconditionally blank a non-contact's view
+// of the phone before applyPrivacy ever ran, so nothing could show it again
+// even when the owner had explicitly made it public.
+func TestProjectorNonContactSeesPhoneWhenPrivacyAllowsAll(t *testing.T) {
+	ctx := context.Background()
+	const (
+		viewerID = int64(3201)
+		ownerID  = int64(3202)
+	)
+	contacts := memory.NewContactStore() // viewer is deliberately NOT a contact of owner
+	privacy := privacyapp.NewService(memory.NewPrivacyStore(), contacts)
+	if _, err := privacy.SetRules(ctx, ownerID, domain.PrivacyKeyPhoneNumber, []domain.PrivacyRule{{Kind: domain.PrivacyRuleAllowAll}}); err != nil {
+		t.Fatalf("set phone privacy to allow_all: %v", err)
+	}
+	projector := New(
+		WithContactStore(contacts),
+		WithPrivacyEvaluator(privacy),
+	)
+	users, err := projector.ForViewer(ctx, viewerID, []domain.User{{
+		ID:        ownerID,
+		Phone:     "15550003202",
+		FirstName: "Owner",
+	}})
+	if err != nil {
+		t.Fatalf("ForViewer: %v", err)
+	}
+	owner := projectionUser(t, users, ownerID)
+	if owner.Contact || owner.Phone != "15550003202" {
+		t.Fatalf("owner projection = %+v, want contact=false with visible phone", owner)
+	}
+	batch, err := projector.ForViewers(ctx, []int64{viewerID}, []domain.User{{
+		ID:        ownerID,
+		Phone:     "15550003202",
+		FirstName: "Owner",
+	}})
+	if err != nil {
+		t.Fatalf("ForViewers: %v", err)
+	}
+	batchOwner := projectionUser(t, batch[viewerID], ownerID)
+	if batchOwner.Contact || batchOwner.Phone != "15550003202" {
+		t.Fatalf("batch owner projection = %+v, want contact=false with visible phone", batchOwner)
+	}
+}
+
 func TestProjectorAccountFreezeIsViewerScopedAndReversible(t *testing.T) {
 	ctx := context.Background()
 	const (
