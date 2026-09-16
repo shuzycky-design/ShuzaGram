@@ -800,6 +800,38 @@ export type AdminLoginResult = AdminSession & {
   csrf_token: string;
 };
 
+// Adapted from github.com/owpengram/owpengram-server (Apache-2.0) -- see
+// adminusers.go's package doc comment.
+
+// AdminConsoleUser is one named panel operator (admin_console_users row).
+// Never carries a password hash -- see the Go struct's own doc comment.
+export type AdminConsoleUser = {
+  id: number;
+  username: string;
+  permissions: string[];
+  enabled: boolean;
+  token_epoch: number;
+  created_at: string;
+  updated_at: string;
+  last_login_at?: string | null;
+};
+
+// AdminConsoleSystemOperator is the synthetic row the list endpoint reports
+// for the break-glass credential (TELESRV_ADMIN_UI_PASSWORD/_TOKEN), which
+// has no database row of its own.
+export type AdminConsoleSystemOperator = {
+  username: string;
+  permissions: string[];
+  enabled: true;
+  system: true;
+};
+
+export type AdminUsersResponse = {
+  rows: AdminConsoleUser[];
+  system: AdminConsoleSystemOperator | null;
+  available_permissions: string[];
+};
+
 export type MessageDetail = {
   Message: MessageRow;
   MessageJSON: string;

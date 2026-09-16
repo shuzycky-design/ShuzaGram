@@ -22,13 +22,20 @@ import {
   Sticker,
   Trophy,
   Users,
+  UserCog,
 	Gift,
 	Send
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "../api";
 import { LanguageSwitch, useI18n } from "../i18n";
-import { permissionBotVerificationReview, permissionPremiumManage, permissionVerificationReview, useCan } from "../permissions";
+import {
+  permissionAdminsManage,
+  permissionBotVerificationReview,
+  permissionPremiumManage,
+  permissionVerificationReview,
+  useCan
+} from "../permissions";
 import { type Navigate, type RouteState, routeSubtitle, routeTitle } from "../routing";
 import { ThemeSwitch } from "../theme";
 import { AppLink } from "./AppLink";
@@ -70,6 +77,9 @@ export function Shell({
   // sections are granted independently, so one entry can be visible without the other.
   const canReviewBotVerification = useCan(permissionBotVerificationReview);
   const canManagePremium = useCan(permissionPremiumManage);
+  // Hidden for the same reason as the verification entries above: without
+  // admins.manage the link only leads to a 403 (and the route is gated too).
+  const canManageAdmins = useCan(permissionAdminsManage);
   const messagesActive = route.path.startsWith("/messages");
   const [messagesOpen, setMessagesOpen] = useState(messagesActive);
 
@@ -125,6 +135,9 @@ export function Shell({
           <NavLink icon={<Sticker size={16} />} href="/stickers" route={route} navigate={navigate}>{t("layout.stickers")}</NavLink>
           <NavLink icon={<Smile size={16} />} href="/emoji" route={route} navigate={navigate}>{t("layout.emoji")}</NavLink>
 		  <NavLink icon={<Film size={16} />} href="/gif-catalog" route={route} navigate={navigate}>{t("layout.gifCatalog")}</NavLink>
+          {canManageAdmins && (
+            <NavLink icon={<UserCog size={16} />} href="/admin-users" route={route} navigate={navigate}>{t("layout.adminUsers")}</NavLink>
+          )}
           <div className={`nav-section ${messagesActive ? "active" : ""} ${messagesOpen ? "open" : ""}`}>
             <button
               className="nav-section-toggle"

@@ -21,7 +21,8 @@
   .operation-row,
   .raw-grid,
   .message-selector-grid,
-  .message-selector-grid.single {
+  .message-selector-grid.single,
+  .operator-identity {
     grid-template-columns: 1fr;
   }
 

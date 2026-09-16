@@ -1460,3 +1460,64 @@
   font-weight: 800;
   letter-spacing: -.02em;
 }
+
+/* Admin operators (cmd/telesrv-admin/web/src/pages/AdminUsersPage.tsx).
+   Adapted from github.com/owpengram/owpengram-server (Apache-2.0). */
+
+.chip-row { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 5px; }
+
+.operator-identity {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding-bottom: 4px;
+}
+
+.permission-groups { display: flex; flex-direction: column; gap: 14px; }
+
+.permission-group {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+}
+
+.permission-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.permission-group-head small { display: block; color: var(--muted); font-weight: 500; }
+
+.permission-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.permission-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.permission-item:has(input:disabled) { cursor: default; opacity: .55; }
+
+.permission-item input[type="checkbox"] { margin-top: 2px; }
+
+.permission-copy { display: flex; flex-direction: column; gap: 1px; }
+
+.permission-copy small { color: var(--muted); font-weight: 500; }
+
+.permission-item.standalone {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+}
+
+.modal.narrow { width: min(440px, 100%); }

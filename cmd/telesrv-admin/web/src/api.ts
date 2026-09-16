@@ -5,6 +5,7 @@ import type {
   AccountRatingListResponse,
   AdminLoginResult,
   AdminSession,
+  AdminUsersResponse,
   AutoSubscribeChannelListResponse,
   BotDetail,
   BotListResponse,
@@ -148,16 +149,20 @@ export function errorMessage(error: unknown): string {
 
 export const api = {
   session: () => request<AdminSession>("/api/session"),
-  login: async (secret: string) => {
+  // username is optional: blank resolves to the break-glass operator, same as
+  // before named accounts existed. See adminauth.go's authenticateLogin.
+  login: async (secret: string, username?: string) => {
     const result = await request<AdminLoginResult>("/api/login", {
       method: "POST",
-      body: JSON.stringify({ secret })
+      body: JSON.stringify({ secret, username: username?.trim() || undefined })
     });
     // Stashed here rather than in the caller so no login path can forget it.
     rememberCSRFToken(result.csrf_token);
     return result;
   },
   logout: () => request<{ ok: boolean }>("/api/logout", { method: "POST", body: "{}" }),
+  // Adapted from github.com/owpengram/owpengram-server (Apache-2.0).
+  adminUsers: () => request<AdminUsersResponse>("/api/admin-users"),
   accounts: (params: URLSearchParams) => request<AccountListResponse>(`/api/accounts?${params.toString()}`),
   account: (id: number) => request<AccountDetail>(`/api/accounts/${id}`),
   channels: (params: URLSearchParams) => request<ChannelListResponse>(`/api/channels?${params.toString()}`),
