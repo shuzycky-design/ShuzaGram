@@ -133,6 +133,21 @@ WHERE enabled
 	return n, nil
 }
 
+// AdminConsoleUserAccess reads just the two fields guardManagerRemoval needs
+// to decide whether an edit is actually touching manager status, without
+// pulling the rest of AdminConsoleUser.
+func (s *readStore) AdminConsoleUserAccess(ctx context.Context, id int64) (enabled bool, permissions []string, err error) {
+	err = s.pool.QueryRow(ctx, `SELECT enabled, permissions FROM admin_console_users WHERE id = $1`, id).
+		Scan(&enabled, &permissions)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil, errAdminUserNotFound
+	}
+	if err != nil {
+		return false, nil, fmt.Errorf("load admin console user access: %w", err)
+	}
+	return enabled, permissions, nil
+}
+
 // touchAdminConsoleUserLogin stamps last_login_at, best-effort: a failure here
 // must never block a successful login.
 func (s *readStore) touchAdminConsoleUserLogin(ctx context.Context, id int64) {

@@ -451,9 +451,25 @@ func enabledWord(enabled bool) string {
 // guardManagerRemoval refuses an edit that would leave nobody able to manage
 // operators. Counted over the other accounts, so demoting or disabling the
 // only remaining manager is what trips it.
+//
+// It only runs the (extra-query) "is anyone else left" check when the target
+// account currently holds admins.manage while enabled -- editing or deleting
+// an account that never had it cannot be the edit that removes the last
+// manager, and requiring one to already exist just to touch an unrelated
+// account would make every account but the first permanently stuck the
+// moment a fresh deployment creates its first non-manager operator.
 func (s *server) guardManagerRemoval(ctx context.Context, id int64, permissions []string, enabled bool) error {
 	stillManages := enabled && newPanelPermissions(permissions).Has(permissionAdminsManage)
 	if stillManages {
+		return nil
+	}
+	currentlyEnabled, currentPermissions, err := s.read.AdminConsoleUserAccess(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !currentlyEnabled || !newPanelPermissions(currentPermissions).Has(permissionAdminsManage) {
+		// This account was never a manager (or is already disabled), so this
+		// edit cannot be the one that removes the last one.
 		return nil
 	}
 	others, err := s.read.CountEnabledAdminConsoleUsersWith(ctx, permissionAdminsManage, id)
