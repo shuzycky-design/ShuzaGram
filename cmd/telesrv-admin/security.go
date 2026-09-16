@@ -54,9 +54,107 @@ const (
 	// business-data review queue with a separate "just look" tier worth
 	// having.
 	permissionServerManage = "server.manage"
+	// permissionAdminsManage gates the operator accounts themselves: creating
+	// them, editing their rights, disabling them, resetting their passwords.
+	// Adapted from github.com/owpengram/owpengram-server (Apache-2.0) -- see
+	// adminusers.go's package doc comment.
+	//
+	// It is the one right that can grant every other right, so it is never
+	// implied by anything else and is worth handing out to far fewer people
+	// than server.manage. guardManagerRemoval additionally refuses the edit
+	// that would leave nobody holding it.
+	permissionAdminsManage = "admins.manage"
+
+	// Section rights, in read/manage pairs that follow the sidebar. Reading a
+	// section and changing it are separate grants because most of the people
+	// who need to look at this data never need to alter it. Adapted from
+	// owpengram-server alongside permissionAdminsManage; wired onto every
+	// route the section covers in server.go's route table.
+	permissionAccountsRead     = "accounts.read"
+	permissionAccountsManage   = "accounts.manage"
+	permissionChannelsRead     = "channels.read"
+	permissionChannelsManage   = "channels.manage"
+	permissionBotsRead         = "bots.read"
+	permissionBotsManage       = "bots.manage"
+	permissionMessagesRead     = "messages.read"
+	permissionMessagesManage   = "messages.manage"
+	permissionModerationReview = "moderation.review"
+	permissionBroadcastsRead   = "broadcasts.read"
+	permissionBroadcastsSend   = "broadcasts.send"
+	permissionStorageRead      = "storage.read"
+	permissionStorageManage    = "storage.manage"
+	// Sticker packs, emoji packs and the GIF catalogue: one section as far as
+	// the panel is concerned, so one pair of rights.
+	permissionContentRead     = "content.read"
+	permissionContentManage   = "content.manage"
+	permissionUsernamesRead   = "usernames.read"
+	permissionUsernamesManage = "usernames.manage"
+	// Gifts (the marketplace, collectibles and auctions): gramsrv's own
+	// addition on top of the owpengram-server shape above, since gifts are
+	// the one area this panel is ahead on -- see gifts_page and the Server
+	// Settings/Gifts sidebar entries.
+	permissionGiftsRead     = "gifts.read"
+	permissionGiftsManage   = "gifts.manage"
+	permissionDashboardRead = "dashboard.read"
+
+	// permissionSessionOnly marks the handful of routes that need a session
+	// but no right: reading who you are, and signing out. It is not a
+	// grantable name -- scopedRoute treats it as "authenticated is enough" --
+	// so it can never be typed into an account's permission list by mistake.
+	permissionSessionOnly = ""
 )
 
+// assignablePermissions is the vocabulary the operator-accounts screen
+// offers. Adapted from github.com/owpengram/owpengram-server (Apache-2.0).
+//
+// The wildcard is deliberately absent: it is meaningful in
+// TELESRV_ADMIN_UI_PERMISSIONS for the break-glass login, but handing "*" to
+// a named account through a UI is how least privilege quietly stops being a
+// thing. An operator who genuinely needs everything gets every entry ticked,
+// which at least leaves a legible record of what was granted.
+func assignablePermissions() []string {
+	return []string{
+		permissionAccountsRead,
+		permissionAccountsManage,
+		permissionChannelsRead,
+		permissionChannelsManage,
+		permissionBotsRead,
+		permissionBotsManage,
+		permissionMessagesRead,
+		permissionMessagesManage,
+		permissionModerationReview,
+		permissionBroadcastsRead,
+		permissionBroadcastsSend,
+		permissionContentRead,
+		permissionContentManage,
+		permissionUsernamesRead,
+		permissionUsernamesManage,
+		permissionGiftsRead,
+		permissionGiftsManage,
+		permissionStorageRead,
+		permissionStorageManage,
+		permissionDashboardRead,
+		permissionServerManage,
+		permissionAdminsManage,
+	}
+}
+
 type permissionsKey struct{}
+
+// scopedRoute is the preferred way to register a permission-gated API route:
+// requiring the permission as an argument nudges every new route towards
+// stating which right it belongs to instead of quietly inheriting "any
+// session will do". Adapted from github.com/owpengram/owpengram-server
+// (Apache-2.0); existing routes registered directly through requireAuthAPI/
+// requirePermission keep working unchanged, this is additive.
+//
+// permissionSessionOnly is the deliberate exception, spelled out at each use.
+func (s *server) scopedRoute(permission string, handler http.Handler) http.Handler {
+	if permission == permissionSessionOnly {
+		return s.requireAuthAPI(handler)
+	}
+	return s.requireAuthAPI(s.requirePermission(permission, handler))
+}
 
 // requireAuthAPI is the gate on every authenticated API route: a valid session,
 // and -- for a mutating request -- a valid CSRF token.
@@ -76,10 +174,47 @@ func (s *server) requireAuthAPI(next http.Handler) http.Handler {
 		if !checkMutationSafety(w, r, claims) {
 			return
 		}
+		// Rights inside the cookie are a 12-hour snapshot; the account they
+		// belong to may have been disabled, demoted or had its password
+		// changed since. Re-read it and use what the database says now, so
+		// revocation takes effect on the next request rather than at session
+		// expiry. Adapted from github.com/owpengram/owpengram-server
+		// (Apache-2.0).
+		permissions, ok := s.currentSessionPermissions(r.Context(), claims)
+		if !ok {
+			clearSessionCookie(w)
+			writeAPIError(w, http.StatusUnauthorized, "session is no longer valid")
+			return
+		}
 		ctx := context.WithValue(r.Context(), actorKey{}, claims.Actor)
-		ctx = context.WithValue(ctx, permissionsKey{}, newPanelPermissions(claims.Permissions))
+		ctx = context.WithValue(ctx, permissionsKey{}, permissions)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// currentSessionPermissions resolves the rights this request actually gets.
+//
+// The break-glass operator (UserID 0) has no database row and keeps the
+// configured set -- that login exists precisely for when the database cannot
+// be consulted, so it must not depend on one.
+//
+// A named account is re-read every request. Anything that moved its token
+// epoch invalidates the session; anything that narrowed its permissions
+// narrows this request. A read failure is treated as a refusal rather than as
+// permission, so a database outage cannot silently widen access. Adapted
+// from github.com/owpengram/owpengram-server (Apache-2.0).
+func (s *server) currentSessionPermissions(ctx context.Context, claims sessionClaims) (panelPermissions, bool) {
+	if claims.UserID == 0 {
+		return newPanelPermissions(claims.Permissions), true
+	}
+	if s.read == nil {
+		return panelPermissions{}, false
+	}
+	enabled, epoch, permissions, err := s.read.AdminConsoleSessionState(ctx, claims.UserID)
+	if err != nil || !enabled || epoch != claims.Epoch {
+		return panelPermissions{}, false
+	}
+	return newPanelPermissions(permissions), true
 }
 
 // requirePermission refuses a session that was not granted the right, before the

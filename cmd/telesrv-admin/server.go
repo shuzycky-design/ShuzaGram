@@ -68,7 +68,7 @@ func (s *server) routes() http.Handler {
 	// itself, so nothing is stranded by protecting it.
 	mux.Handle("POST /api/logout", s.requireAuthAPI(http.HandlerFunc(s.handleAPILogout)))
 	mux.Handle("GET /api/session", s.requireAuthAPI(http.HandlerFunc(s.handleSession)))
-	mux.Handle("GET /api/dashboard", s.requireAuthAPI(http.HandlerFunc(s.handleDashboardAPI)))
+	mux.Handle("GET /api/dashboard", s.scopedRoute(permissionDashboardRead, http.HandlerFunc(s.handleDashboardAPI)))
 	mux.Handle("GET /api/server/identity", s.serverManage(s.handleServerIdentityAPI))
 	mux.Handle("GET /api/server/icon", s.serverManage(s.handleServerIconAPI))
 	mux.Handle("POST /api/actions/set-server-identity", s.serverManage(s.handleSetServerIdentityAPI))
@@ -78,110 +78,125 @@ func (s *server) routes() http.Handler {
 	mux.Handle("GET /api/server/env", s.serverManage(s.handleServerEnvAPI))
 	mux.Handle("POST /api/actions/restart-server", s.serverManage(s.handleRestartServerAPI))
 	mux.Handle("POST /api/actions/update-server-env", s.serverManage(s.handleUpdateServerEnvAPI))
-	mux.Handle("GET /api/auto-subscribe-channels", s.requireAuthAPI(http.HandlerFunc(s.handleAutoSubscribeChannelsAPI)))
-	mux.Handle("GET /api/accounts", s.requireAuthAPI(http.HandlerFunc(s.handleAccountsAPI)))
-	mux.Handle("GET /api/accounts/{id}", s.requireAuthAPI(http.HandlerFunc(s.handleAccountDetailAPI)))
-	mux.Handle("GET /api/accounts/{id}/avatar", s.requireAuthAPI(http.HandlerFunc(s.handleAccountAvatarAPI)))
-	mux.Handle("GET /api/channels", s.requireAuthAPI(http.HandlerFunc(s.handleChannelsAPI)))
-	mux.Handle("GET /api/channels/{id}", s.requireAuthAPI(http.HandlerFunc(s.handleChannelDetailAPI)))
-	mux.Handle("GET /api/channels/{id}/avatar", s.requireAuthAPI(http.HandlerFunc(s.handleChannelAvatarAPI)))
-	mux.Handle("GET /api/bots", s.requireAuthAPI(http.HandlerFunc(s.handleBotsAPI)))
-	mux.Handle("GET /api/broadcasts", s.requireAuthAPI(http.HandlerFunc(s.handleBroadcastsAPI)))
-	mux.Handle("GET /api/bots/{id}", s.requireAuthAPI(http.HandlerFunc(s.handleBotDetailAPI)))
+	// Operator accounts -- adapted from github.com/owpengram/owpengram-server
+	// (Apache-2.0), see adminusers.go's package doc comment.
+	mux.Handle("GET /api/admin-users", s.requireAdminsManage(http.HandlerFunc(s.handleListAdminUsersAPI)))
+	mux.Handle("POST /api/actions/create-admin-user", s.requireAdminsManage(http.HandlerFunc(s.handleCreateAdminUserAPI)))
+	mux.Handle("POST /api/actions/set-admin-user-access", s.requireAdminsManage(http.HandlerFunc(s.handleUpdateAdminUserAPI)))
+	mux.Handle("POST /api/actions/set-admin-user-password", s.requireAdminsManage(http.HandlerFunc(s.handleSetAdminUserPasswordAPI)))
+	mux.Handle("POST /api/actions/delete-admin-user", s.requireAdminsManage(http.HandlerFunc(s.handleDeleteAdminUserAPI)))
+	// Section rights below are adapted from github.com/owpengram/owpengram-
+	// server (Apache-2.0) -- see adminusers.go's package doc comment. Two
+	// gramsrv-only sections (gifts, collectible phones) get their own right
+	// rather than borrowing one that reads misleadingly.
+	mux.Handle("GET /api/auto-subscribe-channels", s.scopedRoute(permissionChannelsRead, http.HandlerFunc(s.handleAutoSubscribeChannelsAPI)))
+	mux.Handle("GET /api/accounts", s.scopedRoute(permissionAccountsRead, http.HandlerFunc(s.handleAccountsAPI)))
+	mux.Handle("GET /api/accounts/{id}", s.scopedRoute(permissionAccountsRead, http.HandlerFunc(s.handleAccountDetailAPI)))
+	mux.Handle("GET /api/accounts/{id}/avatar", s.scopedRoute(permissionAccountsRead, http.HandlerFunc(s.handleAccountAvatarAPI)))
+	mux.Handle("GET /api/channels", s.scopedRoute(permissionChannelsRead, http.HandlerFunc(s.handleChannelsAPI)))
+	mux.Handle("GET /api/channels/{id}", s.scopedRoute(permissionChannelsRead, http.HandlerFunc(s.handleChannelDetailAPI)))
+	mux.Handle("GET /api/channels/{id}/avatar", s.scopedRoute(permissionChannelsRead, http.HandlerFunc(s.handleChannelAvatarAPI)))
+	mux.Handle("GET /api/bots", s.scopedRoute(permissionBotsRead, http.HandlerFunc(s.handleBotsAPI)))
+	mux.Handle("GET /api/broadcasts", s.scopedRoute(permissionBroadcastsRead, http.HandlerFunc(s.handleBroadcastsAPI)))
+	mux.Handle("GET /api/bots/{id}", s.scopedRoute(permissionBotsRead, http.HandlerFunc(s.handleBotDetailAPI)))
 	mux.Handle("GET /api/premium/plans", s.premiumManage(s.handlePremiumPlansAPI))
-	mux.Handle("GET /api/emoji", s.requireAuthAPI(http.HandlerFunc(s.handleEmojiAPI)))
-	mux.Handle("GET /api/emoji/{id}/animation", s.requireAuthAPI(http.HandlerFunc(s.handleEmojiAnimationAPI)))
-	mux.Handle("GET /api/stickers", s.requireAuthAPI(http.HandlerFunc(s.handleStickerSetsAPI)))
-	mux.Handle("GET /api/stickers/{id}/documents", s.requireAuthAPI(http.HandlerFunc(s.handleStickerSetDocumentsAPI)))
-	mux.Handle("GET /api/stickers/documents/{id}/animation", s.requireAuthAPI(http.HandlerFunc(s.handleStickerDocumentAnimationAPI)))
-	mux.Handle("GET /api/gif-catalog", s.requireAuthAPI(http.HandlerFunc(s.handleGifCatalogAPI)))
-	mux.Handle("GET /api/gif-catalog/documents/{id}/preview", s.requireAuthAPI(http.HandlerFunc(s.handleGifCatalogPreviewAPI)))
-	mux.Handle("GET /api/messages", s.requireAuthAPI(http.HandlerFunc(s.handleMessagesAPI)))
-	mux.Handle("GET /api/messages/detail", s.requireAuthAPI(http.HandlerFunc(s.handleMessageDetailAPI)))
-	mux.Handle("GET /api/messages/groups", s.requireAuthAPI(http.HandlerFunc(s.handleGroupMessagesAPI)))
-	mux.Handle("GET /api/messages/groups/detail", s.requireAuthAPI(http.HandlerFunc(s.handleGroupMessageDetailAPI)))
-	mux.Handle("GET /api/gifts", s.requireAuthAPI(http.HandlerFunc(s.handleStarGiftsAPI)))
-	mux.Handle("GET /api/auctions", s.requireAuthAPI(http.HandlerFunc(s.handleStarGiftAuctionsAPI)))
-	mux.Handle("GET /api/official-gifts", s.requireAuthAPI(http.HandlerFunc(s.handleOfficialStarGiftsAPI)))
-	mux.Handle("GET /api/official-gifts/{id}/animation", s.requireAuthAPI(http.HandlerFunc(s.handleOfficialStarGiftAnimationAPI)))
-	mux.Handle("GET /api/gifts/{id}/animation", s.requireAuthAPI(http.HandlerFunc(s.handleStarGiftAnimationAPI)))
-	mux.Handle("GET /api/gifts/{id}/collectibles", s.requireAuthAPI(http.HandlerFunc(s.handleStarGiftCollectiblesAPI)))
-	mux.Handle("GET /api/gifts/{id}/collectibles/pending", s.requireAuthAPI(http.HandlerFunc(s.handlePendingStarGiftCollectibleAPI)))
-	mux.Handle("GET /api/gifts/{id}/collectibles/{kind}/{attribute_id}/animation", s.requireAuthAPI(http.HandlerFunc(s.handleStarGiftCollectibleAnimationAPI)))
-	mux.Handle("GET /api/collectible-usernames", s.requireAuthAPI(http.HandlerFunc(s.handleCollectibleUsernamesAPI)))
-	mux.Handle("GET /api/collectible-usernames/{id}", s.requireAuthAPI(http.HandlerFunc(s.handleCollectibleUsernameDetailAPI)))
-	mux.Handle("GET /api/collectible-phones", s.requireAuthAPI(http.HandlerFunc(s.handleCollectiblePhonesAPI)))
-	mux.Handle("GET /api/collectible-phones/{id}", s.requireAuthAPI(http.HandlerFunc(s.handleCollectiblePhoneDetailAPI)))
-	mux.Handle("GET /api/account-ratings", s.requireAuthAPI(http.HandlerFunc(s.handleAccountRatingsAPI)))
-	mux.Handle("GET /api/account-ratings/{user_id}", s.requireAuthAPI(http.HandlerFunc(s.handleAccountRatingDetailAPI)))
-	mux.Handle("GET /api/storage/stats", s.requireAuthAPI(http.HandlerFunc(s.handleStorageStatsAPI)))
-	mux.Handle("GET /api/moderation/cases", s.requireAuthAPI(http.HandlerFunc(s.handleModerationCasesAPI)))
-	mux.Handle("GET /api/moderation/cases/{id}", s.requireAuthAPI(http.HandlerFunc(s.handleModerationCaseAPI)))
-	mux.Handle("GET /api/moderation/reports/{id}", s.requireAuthAPI(http.HandlerFunc(s.handleModerationReportAPI)))
-	mux.Handle("POST /api/moderation/cases/{id}/claim", s.requireAuthAPI(http.HandlerFunc(s.handleClaimModerationCaseAPI)))
-	mux.Handle("POST /api/moderation/cases/{id}/decide", s.requireAuthAPI(http.HandlerFunc(s.handleDecideModerationCaseAPI)))
-	mux.Handle("POST /api/moderation/cases/{id}/appeals/{appeal_id}/review", s.requireAuthAPI(http.HandlerFunc(s.handleReviewModerationAppealAPI)))
-	mux.Handle("POST /api/actions/set-frozen", s.requireAuthAPI(http.HandlerFunc(s.handleSetAccountFrozenAPI)))
+	mux.Handle("GET /api/emoji", s.scopedRoute(permissionContentRead, http.HandlerFunc(s.handleEmojiAPI)))
+	mux.Handle("GET /api/emoji/{id}/animation", s.scopedRoute(permissionContentRead, http.HandlerFunc(s.handleEmojiAnimationAPI)))
+	mux.Handle("GET /api/stickers", s.scopedRoute(permissionContentRead, http.HandlerFunc(s.handleStickerSetsAPI)))
+	mux.Handle("GET /api/stickers/{id}/documents", s.scopedRoute(permissionContentRead, http.HandlerFunc(s.handleStickerSetDocumentsAPI)))
+	mux.Handle("GET /api/stickers/documents/{id}/animation", s.scopedRoute(permissionContentRead, http.HandlerFunc(s.handleStickerDocumentAnimationAPI)))
+	mux.Handle("GET /api/gif-catalog", s.scopedRoute(permissionContentRead, http.HandlerFunc(s.handleGifCatalogAPI)))
+	mux.Handle("GET /api/gif-catalog/documents/{id}/preview", s.scopedRoute(permissionContentRead, http.HandlerFunc(s.handleGifCatalogPreviewAPI)))
+	mux.Handle("GET /api/messages", s.scopedRoute(permissionMessagesRead, http.HandlerFunc(s.handleMessagesAPI)))
+	mux.Handle("GET /api/messages/detail", s.scopedRoute(permissionMessagesRead, http.HandlerFunc(s.handleMessageDetailAPI)))
+	mux.Handle("GET /api/messages/groups", s.scopedRoute(permissionMessagesRead, http.HandlerFunc(s.handleGroupMessagesAPI)))
+	mux.Handle("GET /api/messages/groups/detail", s.scopedRoute(permissionMessagesRead, http.HandlerFunc(s.handleGroupMessageDetailAPI)))
+	mux.Handle("GET /api/gifts", s.scopedRoute(permissionGiftsRead, http.HandlerFunc(s.handleStarGiftsAPI)))
+	mux.Handle("GET /api/auctions", s.scopedRoute(permissionGiftsRead, http.HandlerFunc(s.handleStarGiftAuctionsAPI)))
+	mux.Handle("GET /api/official-gifts", s.scopedRoute(permissionGiftsRead, http.HandlerFunc(s.handleOfficialStarGiftsAPI)))
+	mux.Handle("GET /api/official-gifts/{id}/animation", s.scopedRoute(permissionGiftsRead, http.HandlerFunc(s.handleOfficialStarGiftAnimationAPI)))
+	mux.Handle("GET /api/gifts/{id}/animation", s.scopedRoute(permissionGiftsRead, http.HandlerFunc(s.handleStarGiftAnimationAPI)))
+	mux.Handle("GET /api/gifts/{id}/collectibles", s.scopedRoute(permissionGiftsRead, http.HandlerFunc(s.handleStarGiftCollectiblesAPI)))
+	mux.Handle("GET /api/gifts/{id}/collectibles/pending", s.scopedRoute(permissionGiftsRead, http.HandlerFunc(s.handlePendingStarGiftCollectibleAPI)))
+	mux.Handle("GET /api/gifts/{id}/collectibles/{kind}/{attribute_id}/animation", s.scopedRoute(permissionGiftsRead, http.HandlerFunc(s.handleStarGiftCollectibleAnimationAPI)))
+	mux.Handle("GET /api/collectible-usernames", s.scopedRoute(permissionUsernamesRead, http.HandlerFunc(s.handleCollectibleUsernamesAPI)))
+	mux.Handle("GET /api/collectible-usernames/{id}", s.scopedRoute(permissionUsernamesRead, http.HandlerFunc(s.handleCollectibleUsernameDetailAPI)))
+	// Collectible phones share the usernames right: same "vanity identifier
+	// inventory" section as far as the sidebar and an operator's mental model
+	// are concerned, and owpengram-server has no phones feature to have
+	// already picked a name for a separate one.
+	mux.Handle("GET /api/collectible-phones", s.scopedRoute(permissionUsernamesRead, http.HandlerFunc(s.handleCollectiblePhonesAPI)))
+	mux.Handle("GET /api/collectible-phones/{id}", s.scopedRoute(permissionUsernamesRead, http.HandlerFunc(s.handleCollectiblePhoneDetailAPI)))
+	mux.Handle("GET /api/account-ratings", s.scopedRoute(permissionAccountsRead, http.HandlerFunc(s.handleAccountRatingsAPI)))
+	mux.Handle("GET /api/account-ratings/{user_id}", s.scopedRoute(permissionAccountsRead, http.HandlerFunc(s.handleAccountRatingDetailAPI)))
+	mux.Handle("GET /api/storage/stats", s.scopedRoute(permissionStorageRead, http.HandlerFunc(s.handleStorageStatsAPI)))
+	mux.Handle("GET /api/moderation/cases", s.scopedRoute(permissionModerationReview, http.HandlerFunc(s.handleModerationCasesAPI)))
+	mux.Handle("GET /api/moderation/cases/{id}", s.scopedRoute(permissionModerationReview, http.HandlerFunc(s.handleModerationCaseAPI)))
+	mux.Handle("GET /api/moderation/reports/{id}", s.scopedRoute(permissionModerationReview, http.HandlerFunc(s.handleModerationReportAPI)))
+	mux.Handle("POST /api/moderation/cases/{id}/claim", s.scopedRoute(permissionModerationReview, http.HandlerFunc(s.handleClaimModerationCaseAPI)))
+	mux.Handle("POST /api/moderation/cases/{id}/decide", s.scopedRoute(permissionModerationReview, http.HandlerFunc(s.handleDecideModerationCaseAPI)))
+	mux.Handle("POST /api/moderation/cases/{id}/appeals/{appeal_id}/review", s.scopedRoute(permissionModerationReview, http.HandlerFunc(s.handleReviewModerationAppealAPI)))
+	mux.Handle("POST /api/actions/set-frozen", s.scopedRoute(permissionAccountsManage, http.HandlerFunc(s.handleSetAccountFrozenAPI)))
 	mux.Handle("POST /api/actions/grant-premium", s.premiumManage(s.handleGrantPremiumAPI))
 	mux.Handle("POST /api/actions/upsert-premium-plan", s.premiumManage(s.handleUpsertPremiumPlanAPI))
-	mux.Handle("POST /api/actions/grant-stars", s.requireAuthAPI(http.HandlerFunc(s.handleGrantStarsAPI)))
-	mux.Handle("POST /api/actions/debit-stars", s.requireAuthAPI(http.HandlerFunc(s.handleDebitStarsAPI)))
-	mux.Handle("POST /api/actions/set-verified", s.requireAuthAPI(http.HandlerFunc(s.handleSetVerifiedAPI)))
-	mux.Handle("POST /api/actions/set-account-flags", s.requireAuthAPI(http.HandlerFunc(s.handleSetUserFlagsAPI)))
-	mux.Handle("POST /api/actions/set-channel-flags", s.requireAuthAPI(http.HandlerFunc(s.handleSetChannelFlagsAPI)))
-	mux.Handle("POST /api/actions/add-auto-subscribe-channel", s.requireAuthAPI(http.HandlerFunc(s.handleAddAutoSubscribeChannelAPI)))
-	mux.Handle("POST /api/actions/remove-auto-subscribe-channel", s.requireAuthAPI(http.HandlerFunc(s.handleRemoveAutoSubscribeChannelAPI)))
-	mux.Handle("POST /api/actions/set-support", s.requireAuthAPI(http.HandlerFunc(s.handleSetSupportAPI)))
-	mux.Handle("POST /api/actions/set-account-username", s.requireAuthAPI(http.HandlerFunc(s.handleSetUsernameAPI)))
-	mux.Handle("POST /api/actions/set-account-profile", s.requireAuthAPI(http.HandlerFunc(s.handleSetProfileAPI)))
-	mux.Handle("POST /api/actions/set-account-phone", s.requireAuthAPI(http.HandlerFunc(s.handleSetPhoneAPI)))
-	mux.Handle("POST /api/actions/set-account-login-email", s.requireAuthAPI(http.HandlerFunc(s.handleSetLoginEmailAPI)))
-	mux.Handle("POST /api/actions/set-account-avatar", s.requireAuthAPI(http.HandlerFunc(s.handleSetAccountAvatarAPI)))
-	mux.Handle("POST /api/actions/set-account-color", s.requireAuthAPI(http.HandlerFunc(s.handleSetUserColorAPI)))
-	mux.Handle("POST /api/actions/set-account-emoji-status", s.requireAuthAPI(http.HandlerFunc(s.handleSetUserEmojiStatusAPI)))
-	mux.Handle("POST /api/actions/set-channel-settings", s.requireAuthAPI(http.HandlerFunc(s.handleSetChannelSettingsAPI)))
-	mux.Handle("POST /api/actions/set-channel-username", s.requireAuthAPI(http.HandlerFunc(s.handleSetChannelUsernameAPI)))
-	mux.Handle("POST /api/actions/set-channel-color", s.requireAuthAPI(http.HandlerFunc(s.handleSetChannelColorAPI)))
-	mux.Handle("POST /api/actions/set-channel-emoji-status", s.requireAuthAPI(http.HandlerFunc(s.handleSetChannelEmojiStatusAPI)))
-	mux.Handle("POST /api/actions/set-channel-avatar", s.requireAuthAPI(http.HandlerFunc(s.handleSetChannelAvatarAPI)))
-	mux.Handle("POST /api/actions/create-bot", s.requireAuthAPI(http.HandlerFunc(s.handleCreateBotAPI)))
-	mux.Handle("POST /api/actions/create-broadcast", s.requireAuthAPI(http.HandlerFunc(s.handleCreateBroadcastAPI)))
-	mux.Handle("POST /api/actions/set-sticker-set-archived", s.requireAuthAPI(http.HandlerFunc(s.handleSetStickerSetArchivedAPI)))
-	mux.Handle("POST /api/actions/set-sticker-set-sort-order", s.requireAuthAPI(http.HandlerFunc(s.handleSetStickerSetSortOrderAPI)))
-	mux.Handle("POST /api/actions/rename-sticker-set", s.requireAuthAPI(http.HandlerFunc(s.handleRenameStickerSetAPI)))
-	mux.Handle("POST /api/actions/delete-sticker-set", s.requireAuthAPI(http.HandlerFunc(s.handleDeleteStickerSetAPI)))
-	mux.Handle("POST /api/actions/create-sticker-set", s.requireAuthAPI(http.HandlerFunc(s.handleCreateStickerSetAPI)))
-	mux.Handle("POST /api/actions/add-sticker-to-set", s.requireAuthAPI(http.HandlerFunc(s.handleAddStickerToSetAPI)))
-	mux.Handle("POST /api/actions/remove-sticker-from-set", s.requireAuthAPI(http.HandlerFunc(s.handleRemoveStickerFromSetAPI)))
-	mux.Handle("POST /api/actions/create-gif-catalog-entry", s.requireAuthAPI(http.HandlerFunc(s.handleCreateGifCatalogEntryAPI)))
-	mux.Handle("POST /api/actions/set-gif-catalog-enabled", s.requireAuthAPI(http.HandlerFunc(s.handleSetGifCatalogEnabledAPI)))
-	mux.Handle("POST /api/actions/set-gif-catalog-sort-order", s.requireAuthAPI(http.HandlerFunc(s.handleSetGifCatalogSortOrderAPI)))
-	mux.Handle("POST /api/actions/delete-gif-catalog-entry", s.requireAuthAPI(http.HandlerFunc(s.handleDeleteGifCatalogEntryAPI)))
-	mux.Handle("POST /api/actions/delete-bot", s.requireAuthAPI(http.HandlerFunc(s.handleDeleteBotAPI)))
-	mux.Handle("POST /api/actions/export-bot-token", s.requireAuthAPI(s.requirePermission(permissionBotTokenRead, http.HandlerFunc(s.handleExportBotTokenAPI))))
-	mux.Handle("POST /api/actions/set-channel-verified", s.requireAuthAPI(http.HandlerFunc(s.handleSetChannelVerifiedAPI)))
-	mux.Handle("POST /api/actions/revoke-sessions", s.requireAuthAPI(http.HandlerFunc(s.handleRevokeSessionsAPI)))
-	mux.Handle("POST /api/actions/delete-messages", s.requireAuthAPI(http.HandlerFunc(s.handleDeleteMessagesAPI)))
-	mux.Handle("POST /api/actions/delete-history", s.requireAuthAPI(http.HandlerFunc(s.handleDeleteHistoryAPI)))
-	mux.Handle("POST /api/actions/import-gift", s.requireAuthAPI(http.HandlerFunc(s.handleImportStarGiftAPI)))
-	mux.Handle("POST /api/actions/import-official-gift", s.requireAuthAPI(http.HandlerFunc(s.handleImportOfficialStarGiftAPI)))
-	mux.Handle("POST /api/actions/publish-gift-collectibles", s.requireAuthAPI(http.HandlerFunc(s.handlePublishStarGiftCollectiblesAPI)))
-	mux.Handle("POST /api/actions/set-gift-enabled", s.requireAuthAPI(http.HandlerFunc(s.handleSetStarGiftEnabledAPI)))
-	mux.Handle("POST /api/actions/set-gift-sort-order", s.requireAuthAPI(http.HandlerFunc(s.handleSetStarGiftSortOrderAPI)))
-	mux.Handle("POST /api/actions/give-gift", s.requireAuthAPI(http.HandlerFunc(s.handleGiveGiftAPI)))
-	mux.Handle("POST /api/actions/set-gift-supply", s.requireAuthAPI(http.HandlerFunc(s.handleSetStarGiftSupplyAPI)))
-	mux.Handle("POST /api/actions/delete-gift", s.requireAuthAPI(http.HandlerFunc(s.handleDeleteStarGiftAPI)))
-	mux.Handle("POST /api/actions/mint-collectible-username", s.requireAuthAPI(http.HandlerFunc(s.handleMintCollectibleUsernameAPI)))
-	mux.Handle("POST /api/actions/mint-collectible-phone", s.requireAuthAPI(http.HandlerFunc(s.handleMintCollectiblePhoneAPI)))
-	mux.Handle("POST /api/actions/update-collectible-phone-price", s.requireAuthAPI(http.HandlerFunc(s.handleUpdateCollectiblePhonePriceAPI)))
-	mux.Handle("POST /api/actions/transfer-collectible-phone", s.requireAuthAPI(http.HandlerFunc(s.handleTransferCollectiblePhoneAPI)))
-	mux.Handle("POST /api/actions/revoke-collectible-phone", s.requireAuthAPI(http.HandlerFunc(s.handleRevokeCollectiblePhoneAPI)))
-	mux.Handle("POST /api/actions/delete-collectible-phone", s.requireAuthAPI(http.HandlerFunc(s.handleDeleteCollectiblePhoneAPI)))
-	mux.Handle("POST /api/actions/transfer-collectible-username", s.requireAuthAPI(http.HandlerFunc(s.handleTransferCollectibleUsernameAPI)))
-	mux.Handle("POST /api/actions/revoke-collectible-username", s.requireAuthAPI(http.HandlerFunc(s.handleRevokeCollectibleUsernameAPI)))
-	mux.Handle("POST /api/actions/delete-collectible-username", s.requireAuthAPI(http.HandlerFunc(s.handleDeleteCollectibleUsernameAPI)))
-	mux.Handle("POST /api/actions/recompute-account-rating", s.requireAuthAPI(http.HandlerFunc(s.handleRecomputeAccountRatingAPI)))
-	mux.Handle("POST /api/actions/adjust-account-rating", s.requireAuthAPI(http.HandlerFunc(s.handleAdjustAccountRatingAPI)))
+	mux.Handle("POST /api/actions/grant-stars", s.scopedRoute(permissionAccountsManage, http.HandlerFunc(s.handleGrantStarsAPI)))
+	mux.Handle("POST /api/actions/debit-stars", s.scopedRoute(permissionAccountsManage, http.HandlerFunc(s.handleDebitStarsAPI)))
+	mux.Handle("POST /api/actions/set-verified", s.scopedRoute(permissionVerificationReview, http.HandlerFunc(s.handleSetVerifiedAPI)))
+	mux.Handle("POST /api/actions/set-account-flags", s.scopedRoute(permissionAccountsManage, http.HandlerFunc(s.handleSetUserFlagsAPI)))
+	mux.Handle("POST /api/actions/set-channel-flags", s.scopedRoute(permissionChannelsManage, http.HandlerFunc(s.handleSetChannelFlagsAPI)))
+	mux.Handle("POST /api/actions/add-auto-subscribe-channel", s.scopedRoute(permissionChannelsManage, http.HandlerFunc(s.handleAddAutoSubscribeChannelAPI)))
+	mux.Handle("POST /api/actions/remove-auto-subscribe-channel", s.scopedRoute(permissionChannelsManage, http.HandlerFunc(s.handleRemoveAutoSubscribeChannelAPI)))
+	mux.Handle("POST /api/actions/set-support", s.scopedRoute(permissionAccountsManage, http.HandlerFunc(s.handleSetSupportAPI)))
+	mux.Handle("POST /api/actions/set-account-username", s.scopedRoute(permissionAccountsManage, http.HandlerFunc(s.handleSetUsernameAPI)))
+	mux.Handle("POST /api/actions/set-account-profile", s.scopedRoute(permissionAccountsManage, http.HandlerFunc(s.handleSetProfileAPI)))
+	mux.Handle("POST /api/actions/set-account-phone", s.scopedRoute(permissionAccountsManage, http.HandlerFunc(s.handleSetPhoneAPI)))
+	mux.Handle("POST /api/actions/set-account-login-email", s.scopedRoute(permissionAccountsManage, http.HandlerFunc(s.handleSetLoginEmailAPI)))
+	mux.Handle("POST /api/actions/set-account-avatar", s.scopedRoute(permissionAccountsManage, http.HandlerFunc(s.handleSetAccountAvatarAPI)))
+	mux.Handle("POST /api/actions/set-account-color", s.scopedRoute(permissionAccountsManage, http.HandlerFunc(s.handleSetUserColorAPI)))
+	mux.Handle("POST /api/actions/set-account-emoji-status", s.scopedRoute(permissionAccountsManage, http.HandlerFunc(s.handleSetUserEmojiStatusAPI)))
+	mux.Handle("POST /api/actions/set-channel-settings", s.scopedRoute(permissionChannelsManage, http.HandlerFunc(s.handleSetChannelSettingsAPI)))
+	mux.Handle("POST /api/actions/set-channel-username", s.scopedRoute(permissionChannelsManage, http.HandlerFunc(s.handleSetChannelUsernameAPI)))
+	mux.Handle("POST /api/actions/set-channel-color", s.scopedRoute(permissionChannelsManage, http.HandlerFunc(s.handleSetChannelColorAPI)))
+	mux.Handle("POST /api/actions/set-channel-emoji-status", s.scopedRoute(permissionChannelsManage, http.HandlerFunc(s.handleSetChannelEmojiStatusAPI)))
+	mux.Handle("POST /api/actions/set-channel-avatar", s.scopedRoute(permissionChannelsManage, http.HandlerFunc(s.handleSetChannelAvatarAPI)))
+	mux.Handle("POST /api/actions/create-bot", s.scopedRoute(permissionBotsManage, http.HandlerFunc(s.handleCreateBotAPI)))
+	mux.Handle("POST /api/actions/create-broadcast", s.scopedRoute(permissionBroadcastsSend, http.HandlerFunc(s.handleCreateBroadcastAPI)))
+	mux.Handle("POST /api/actions/set-sticker-set-archived", s.scopedRoute(permissionContentManage, http.HandlerFunc(s.handleSetStickerSetArchivedAPI)))
+	mux.Handle("POST /api/actions/set-sticker-set-sort-order", s.scopedRoute(permissionContentManage, http.HandlerFunc(s.handleSetStickerSetSortOrderAPI)))
+	mux.Handle("POST /api/actions/rename-sticker-set", s.scopedRoute(permissionContentManage, http.HandlerFunc(s.handleRenameStickerSetAPI)))
+	mux.Handle("POST /api/actions/delete-sticker-set", s.scopedRoute(permissionContentManage, http.HandlerFunc(s.handleDeleteStickerSetAPI)))
+	mux.Handle("POST /api/actions/create-sticker-set", s.scopedRoute(permissionContentManage, http.HandlerFunc(s.handleCreateStickerSetAPI)))
+	mux.Handle("POST /api/actions/add-sticker-to-set", s.scopedRoute(permissionContentManage, http.HandlerFunc(s.handleAddStickerToSetAPI)))
+	mux.Handle("POST /api/actions/remove-sticker-from-set", s.scopedRoute(permissionContentManage, http.HandlerFunc(s.handleRemoveStickerFromSetAPI)))
+	mux.Handle("POST /api/actions/create-gif-catalog-entry", s.scopedRoute(permissionContentManage, http.HandlerFunc(s.handleCreateGifCatalogEntryAPI)))
+	mux.Handle("POST /api/actions/set-gif-catalog-enabled", s.scopedRoute(permissionContentManage, http.HandlerFunc(s.handleSetGifCatalogEnabledAPI)))
+	mux.Handle("POST /api/actions/set-gif-catalog-sort-order", s.scopedRoute(permissionContentManage, http.HandlerFunc(s.handleSetGifCatalogSortOrderAPI)))
+	mux.Handle("POST /api/actions/delete-gif-catalog-entry", s.scopedRoute(permissionContentManage, http.HandlerFunc(s.handleDeleteGifCatalogEntryAPI)))
+	mux.Handle("POST /api/actions/delete-bot", s.scopedRoute(permissionBotsManage, http.HandlerFunc(s.handleDeleteBotAPI)))
+	mux.Handle("POST /api/actions/export-bot-token", s.scopedRoute(permissionBotTokenRead, http.HandlerFunc(s.handleExportBotTokenAPI)))
+	mux.Handle("POST /api/actions/set-channel-verified", s.scopedRoute(permissionVerificationReview, http.HandlerFunc(s.handleSetChannelVerifiedAPI)))
+	mux.Handle("POST /api/actions/revoke-sessions", s.scopedRoute(permissionAccountsManage, http.HandlerFunc(s.handleRevokeSessionsAPI)))
+	mux.Handle("POST /api/actions/delete-messages", s.scopedRoute(permissionMessagesManage, http.HandlerFunc(s.handleDeleteMessagesAPI)))
+	mux.Handle("POST /api/actions/delete-history", s.scopedRoute(permissionMessagesManage, http.HandlerFunc(s.handleDeleteHistoryAPI)))
+	mux.Handle("POST /api/actions/import-gift", s.scopedRoute(permissionGiftsManage, http.HandlerFunc(s.handleImportStarGiftAPI)))
+	mux.Handle("POST /api/actions/import-official-gift", s.scopedRoute(permissionGiftsManage, http.HandlerFunc(s.handleImportOfficialStarGiftAPI)))
+	mux.Handle("POST /api/actions/publish-gift-collectibles", s.scopedRoute(permissionGiftsManage, http.HandlerFunc(s.handlePublishStarGiftCollectiblesAPI)))
+	mux.Handle("POST /api/actions/set-gift-enabled", s.scopedRoute(permissionGiftsManage, http.HandlerFunc(s.handleSetStarGiftEnabledAPI)))
+	mux.Handle("POST /api/actions/set-gift-sort-order", s.scopedRoute(permissionGiftsManage, http.HandlerFunc(s.handleSetStarGiftSortOrderAPI)))
+	mux.Handle("POST /api/actions/give-gift", s.scopedRoute(permissionGiftsManage, http.HandlerFunc(s.handleGiveGiftAPI)))
+	mux.Handle("POST /api/actions/set-gift-supply", s.scopedRoute(permissionGiftsManage, http.HandlerFunc(s.handleSetStarGiftSupplyAPI)))
+	mux.Handle("POST /api/actions/delete-gift", s.scopedRoute(permissionGiftsManage, http.HandlerFunc(s.handleDeleteStarGiftAPI)))
+	mux.Handle("POST /api/actions/mint-collectible-username", s.scopedRoute(permissionUsernamesManage, http.HandlerFunc(s.handleMintCollectibleUsernameAPI)))
+	mux.Handle("POST /api/actions/mint-collectible-phone", s.scopedRoute(permissionUsernamesManage, http.HandlerFunc(s.handleMintCollectiblePhoneAPI)))
+	mux.Handle("POST /api/actions/update-collectible-phone-price", s.scopedRoute(permissionUsernamesManage, http.HandlerFunc(s.handleUpdateCollectiblePhonePriceAPI)))
+	mux.Handle("POST /api/actions/transfer-collectible-phone", s.scopedRoute(permissionUsernamesManage, http.HandlerFunc(s.handleTransferCollectiblePhoneAPI)))
+	mux.Handle("POST /api/actions/revoke-collectible-phone", s.scopedRoute(permissionUsernamesManage, http.HandlerFunc(s.handleRevokeCollectiblePhoneAPI)))
+	mux.Handle("POST /api/actions/delete-collectible-phone", s.scopedRoute(permissionUsernamesManage, http.HandlerFunc(s.handleDeleteCollectiblePhoneAPI)))
+	mux.Handle("POST /api/actions/transfer-collectible-username", s.scopedRoute(permissionUsernamesManage, http.HandlerFunc(s.handleTransferCollectibleUsernameAPI)))
+	mux.Handle("POST /api/actions/revoke-collectible-username", s.scopedRoute(permissionUsernamesManage, http.HandlerFunc(s.handleRevokeCollectibleUsernameAPI)))
+	mux.Handle("POST /api/actions/delete-collectible-username", s.scopedRoute(permissionUsernamesManage, http.HandlerFunc(s.handleDeleteCollectibleUsernameAPI)))
+	mux.Handle("POST /api/actions/recompute-account-rating", s.scopedRoute(permissionAccountsManage, http.HandlerFunc(s.handleRecomputeAccountRatingAPI)))
+	mux.Handle("POST /api/actions/adjust-account-rating", s.scopedRoute(permissionAccountsManage, http.HandlerFunc(s.handleAdjustAccountRatingAPI)))
 	// Official platform verification. Every route needs verification.review;
 	// clearing an existing badge needs verification.revoke on top of it.
 	mux.Handle("GET /api/verification/applications", s.verificationRead(s.handleVerificationApplicationsAPI))
@@ -281,8 +296,16 @@ func (s *server) handleApp(w http.ResponseWriter, r *http.Request) {
 	s.webServer.ServeHTTP(w, r2)
 }
 
+// Username is optional so an operator who only ever used the shared
+// credential can still just type the password -- an empty/omitted Username
+// resolves to the break-glass operator ("admin") the same way it always did.
+// Adapted from github.com/owpengram/owpengram-server (Apache-2.0), which
+// requires the name explicitly; gramsrv keeps the old single-field login
+// working so existing bookmarks/scripts aren't broken by this change -- see
+// adminauth.go's authenticateLogin for the resolution order.
 type loginRequest struct {
-	Secret string `json:"secret"`
+	Username string `json:"username"`
+	Secret   string `json:"secret"`
 }
 
 // sessionTTL bounds a signed panel session and the CSRF cookie that goes with it,
@@ -302,7 +325,11 @@ func (s *server) handleAPILogin(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if !s.validSecret(req.Secret) {
+	if strings.TrimSpace(req.Username) == "" {
+		req.Username = breakGlassUsername
+	}
+	identity, ok := s.authenticateLogin(r.Context(), req)
+	if !ok {
 		writeAPIError(w, http.StatusUnauthorized, "invalid credential")
 		return
 	}
@@ -311,11 +338,13 @@ func (s *server) handleAPILogin(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	permissions := newPanelPermissions(s.cfg.Permissions)
+	permissions := newPanelPermissions(identity.permissions)
 	value, err := signSession(s.cfg.SessionKey, sessionClaims{
-		Actor:       "admin",
+		Actor:       identity.actor,
 		Exp:         time.Now().Add(sessionTTL).Unix(),
 		Nonce:       newCommandID("sess"),
+		UserID:      identity.userID,
+		Epoch:       identity.epoch,
 		Permissions: permissions.List(),
 		CSRF:        csrfToken,
 	})
@@ -332,8 +361,11 @@ func (s *server) handleAPILogin(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	})
 	setCSRFCookie(w, csrfToken, sessionTTL)
+	if identity.userID != 0 && s.read != nil {
+		s.read.touchAdminConsoleUserLogin(r.Context(), identity.userID)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"actor":       "admin",
+		"actor":       identity.actor,
 		"permissions": permissions.List(),
 		"csrf_token":  csrfToken,
 	})
