@@ -6,7 +6,7 @@
 面向自主部署网络、协议研究，以及需要真实客户端兼容能力的社区聊天系统——
 它不只是一个相似的聊天界面。
 
-[English README](README.md) · [官网](https://telesrv.net) · [OwpenGram 客户端](https://owpengram.org/) · [讨论群](https://t.me/telesrv_chat) · [频道](https://t.me/telesrv)
+[English README](README.md) · [官网](https://shuzagram.com) · [OwpenGram 客户端](https://owpengram.org/) · [讨论群](https://t.me/+GcuQY963kRMwYzIy) · [频道](https://t.me/shuzagram)
 
 <p align="center">
   <img src="docs/assets/gramsrv-telegram-desktop.png" width="68%" alt="Telegram Desktop 正在连接 gramsrv">
