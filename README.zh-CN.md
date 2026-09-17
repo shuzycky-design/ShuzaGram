@@ -56,7 +56,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 ```
 
 官方 Telegram 客户端需要修改服务器 endpoint 和 RSA key 才能连接；请从
-[项目官网](https://telesrv.net)获取兼容客户端。`main` 默认让包含 SFU/TURN 的单体服务
+[项目官网](https://shuzagram.com)获取兼容客户端。`main` 默认让包含 SFU/TURN 的单体服务
 使用宿主网络；宿主不支持时传入 `-BridgeNetwork`。拆分拓扑、端口与防火墙、备份、升级
 和远程访问说明见 [`v2` Docker 部署手册](../../blob/v2/docs/docker-deployment.md)。
 
@@ -129,7 +129,7 @@ Telegram Desktop 是第一兼容目标，Android、iOS 和 Web 路径也在持�
 ## 客户端
 
 官方 Telegram 客户端信任 Telegram 生产环境的 DC 列表和 RSA keys，因此不能
-直接连接私有服务器。你可以使用[项目官网](https://telesrv.net)提供的兼容客户端，
+直接连接私有服务器。你可以使用[项目官网](https://shuzagram.com)提供的兼容客户端，
 也可以自行构建只修改 endpoint 和 key 的客户端。
 
 [OwpenGram](https://owpengram.org/) 是一个支持多服务器的 Telegram 风格客户端，

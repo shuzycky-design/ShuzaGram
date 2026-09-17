@@ -67,7 +67,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 ```
 
 Стоковым клиентам Telegram нужны эндпоинт и патч RSA-ключа. Используй
-совместимый клиент с [сайта проекта](https://telesrv.net). В `main` монолит
+совместимый клиент с [сайта проекта](https://shuzagram.com). В `main` монолит
 по умолчанию использует host networking для SFU/TURN; передавай
 `-BridgeNetwork` только если host networking недоступен. [Руководство по
 развёртыванию `v2` в Docker](../../blob/v2/docs/docker-deployment.en.md)
@@ -183,7 +183,7 @@ Telegram Desktop — основная цель совместимости. Пу�
 Стоковые клиенты Telegram доверяют продакшн-дата-центрам и RSA-ключам
 Telegram, поэтому они не подключаются к приватным серверам без небольшого
 патча эндпоинта и ключа. Используй совместимый клиент с [сайта
-проекта](https://telesrv.net) или собери свой патченый клиент.
+проекта](https://shuzagram.com) или собери свой патченый клиент.
 
 [OwpenGram](https://owpengram.org/) — это клиент в стиле Telegram с
 поддержкой нескольких серверов, со встроенной поддержкой `ShuzaGram`,

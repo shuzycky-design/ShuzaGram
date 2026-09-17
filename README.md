@@ -65,7 +65,7 @@ host's LAN address:
 ```
 
 Stock Telegram clients require an endpoint and RSA-key patch. Use a compatible
-client from the [project website](https://telesrv.net). On `main`, the monolith
+client from the [project website](https://shuzagram.com). On `main`, the monolith
 uses host networking by default for SFU/TURN; pass `-BridgeNetwork` only when
 host networking is unavailable. The [`v2` Docker deployment runbook](../../blob/v2/docs/docker-deployment.en.md)
 covers the split topology, firewall, backup, upgrade, and remote access.
@@ -175,7 +175,7 @@ repository.
 
 Stock Telegram clients trust Telegram's production data centers and RSA keys,
 so they do not connect to private servers without a small endpoint and key
-patch. Use a compatible client from the [project website](https://telesrv.net)
+patch. Use a compatible client from the [project website](https://shuzagram.com)
 or build your own patched client.
 
 [OwpenGram](https://owpengram.org/) is a multi-server Telegram-style client
