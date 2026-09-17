@@ -7,7 +7,7 @@ written in Go. It is built for self-hosted networks, protocol research, and
 community-driven chat systems that need real client compatibility—not just a
 Telegram-like interface.
 
-[Website](https://telesrv.net) · [OwpenGram client](https://owpengram.org/) · [Discussion group](https://t.me/telesrv_chat) · [Channel](https://t.me/telesrv) · [中文 README](README.zh-CN.md)
+[Website](https://telesrv.net) · [OwpenGram client](https://owpengram.org/) · [Discussion group](https://t.me/telesrv_chat) · [Channel](https://t.me/telesrv) · [中文 README](README.zh-CN.md) · [Русский README](README.ru.md)
 
 <p align="center">
   <img src="docs/assets/gramsrv-telegram-desktop.png" width="68%" alt="gramsrv running with Telegram Desktop">
