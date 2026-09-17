@@ -1,8 +1,8 @@
-# gramsrv
+# ShuzaGram
 
 **Own the server. Speak MTProto. Use real Telegram clients.**
 
-`gramsrv` is an open-source Telegram-compatible server and MTProto backend
+`ShuzaGram` is an open-source Telegram-compatible server and MTProto backend
 written in Go. It is built for self-hosted networks, protocol research, and
 community-driven chat systems that need real client compatibility—not just a
 Telegram-like interface.
@@ -10,8 +10,8 @@ Telegram-like interface.
 [Website](https://telesrv.net) · [OwpenGram client](https://owpengram.org/) · [Discussion group](https://t.me/telesrv_chat) · [Channel](https://t.me/telesrv) · [中文 README](README.zh-CN.md) · [Русский README](README.ru.md)
 
 <p align="center">
-  <img src="docs/assets/gramsrv-telegram-desktop.png" width="68%" alt="gramsrv running with Telegram Desktop">
-  <img src="docs/assets/gramsrv-android.png" width="23%" alt="gramsrv running on Android">
+  <img src="docs/assets/gramsrv-telegram-desktop.png" width="68%" alt="ShuzaGram running with Telegram Desktop">
+  <img src="docs/assets/gramsrv-android.png" width="23%" alt="ShuzaGram running on Android">
 </p>
 
 ## Quick start with Docker
@@ -70,9 +70,9 @@ uses host networking by default for SFU/TURN; pass `-BridgeNetwork` only when
 host networking is unavailable. The [`v2` Docker deployment runbook](../../blob/v2/docs/docker-deployment.en.md)
 covers the split topology, firewall, backup, upgrade, and remote access.
 
-## Why gramsrv
+## Why ShuzaGram
 
-Most Telegram clones reproduce the interface. `gramsrv` implements the server
+Most Telegram clones reproduce the interface. `ShuzaGram` implements the server
 side of the protocol so compatible clients can communicate through
 infrastructure you control.
 
@@ -179,7 +179,7 @@ patch. Use a compatible client from the [project website](https://telesrv.net)
 or build your own patched client.
 
 [OwpenGram](https://owpengram.org/) is a multi-server Telegram-style client
-with built-in support for `gramsrv`, private deployments, community nodes, and
+with built-in support for `ShuzaGram`, private deployments, community nodes, and
 the official network from one client experience.
 
 ## Build it with us
@@ -193,6 +193,6 @@ language pack.
 
 ## License and independence
 
-`gramsrv` is released under the [Apache License 2.0](LICENSE). It is independent
+`ShuzaGram` is released under the [Apache License 2.0](LICENSE). It is independent
 and unofficial, and is not affiliated with, endorsed by, or sponsored by
 Telegram or its official team.

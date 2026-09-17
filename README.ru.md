@@ -1,8 +1,8 @@
-# gramsrv
+# ShuzaGram
 
 **Владей сервером. Говори на MTProto. Используй настоящие клиенты Telegram.**
 
-`gramsrv` — это открытый совместимый с Telegram сервер и бэкенд MTProto,
+`ShuzaGram` — это открытый совместимый с Telegram сервер и бэкенд MTProto,
 написанный на Go. Он создан для самостоятельно размещаемых сетей,
 исследования протокола и сообществ, которым нужна настоящая совместимость с
 клиентами — а не просто интерфейс, похожий на Telegram.
@@ -10,8 +10,8 @@
 [Website](https://telesrv.net) · [Клиент OwpenGram](https://owpengram.org/) · [Группа обсуждения](https://t.me/telesrv_chat) · [Канал](https://t.me/telesrv) · [中文 README](README.zh-CN.md)
 
 <p align="center">
-  <img src="docs/assets/gramsrv-telegram-desktop.png" width="68%" alt="gramsrv running with Telegram Desktop">
-  <img src="docs/assets/gramsrv-android.png" width="23%" alt="gramsrv running on Android">
+  <img src="docs/assets/gramsrv-telegram-desktop.png" width="68%" alt="ShuzaGram running with Telegram Desktop">
+  <img src="docs/assets/gramsrv-android.png" width="23%" alt="ShuzaGram running on Android">
 </p>
 
 ## Быстрый старт с Docker
@@ -74,9 +74,9 @@ Set-ExecutionPolicy -Scope Process Bypass
 охватывает разделённую топологию, файрвол, бэкапы, обновление и удалённый
 доступ.
 
-## Почему gramsrv
+## Почему ShuzaGram
 
-Большинство клонов Telegram воспроизводят интерфейс. `gramsrv` реализует
+Большинство клонов Telegram воспроизводят интерфейс. `ShuzaGram` реализует
 серверную сторону протокола, чтобы совместимые клиенты могли общаться через
 инфраструктуру, которую контролируешь ты.
 
@@ -186,7 +186,7 @@ Telegram, поэтому они не подключаются к приватн�
 проекта](https://telesrv.net) или собери свой патченый клиент.
 
 [OwpenGram](https://owpengram.org/) — это клиент в стиле Telegram с
-поддержкой нескольких серверов, со встроенной поддержкой `gramsrv`,
+поддержкой нескольких серверов, со встроенной поддержкой `ShuzaGram`,
 приватных развёртываний, узлов сообщества и официальной сети в рамках
 одного клиентского опыта.
 
@@ -201,6 +201,6 @@ Telegram, поэтому они не подключаются к приватн�
 
 ## Лицензия и независимость
 
-`gramsrv` распространяется под лицензией [Apache License 2.0](LICENSE). Он
+`ShuzaGram` распространяется под лицензией [Apache License 2.0](LICENSE). Он
 независим и неофициален, не аффилирован с Telegram или его официальной
 командой, не одобрен и не спонсируется ими.
