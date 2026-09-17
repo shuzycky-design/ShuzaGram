@@ -7,7 +7,7 @@
 исследования протокола и сообществ, которым нужна настоящая совместимость с
 клиентами — а не просто интерфейс, похожий на Telegram.
 
-[Website](https://telesrv.net) · [Клиент OwpenGram](https://owpengram.org/) · [Группа обсуждения](https://t.me/telesrv_chat) · [Канал](https://t.me/telesrv) · [中文 README](README.zh-CN.md)
+[Website](https://shuzagram.com) · [Клиент OwpenGram](https://owpengram.org/) · [Группа обсуждения](https://t.me/+GcuQY963kRMwYzIy) · [Канал](https://t.me/shuzagram) · [中文 README](README.zh-CN.md)
 
 <p align="center">
   <img src="docs/assets/gramsrv-telegram-desktop.png" width="68%" alt="ShuzaGram running with Telegram Desktop">
