@@ -1246,6 +1246,18 @@ func (fakeService) CollectibleUsernameTransfers(context.Context, int64, int) ([]
 	return nil, nil
 }
 
+func (fakeService) Countries(context.Context) (domain.CountriesList, error) {
+	return domain.CountriesList{}, nil
+}
+
+func (fakeService) UpsertCountry(_ context.Context, req admin.UpsertCountryRequest) (admin.CommandResult, error) {
+	return admin.CommandResult{CommandID: req.CommandID, Status: "completed", DryRun: req.DryRun}, nil
+}
+
+func (fakeService) DeleteCountry(_ context.Context, req admin.DeleteCountryRequest) (admin.CommandResult, error) {
+	return admin.CommandResult{CommandID: req.CommandID, Status: "completed", DryRun: req.DryRun}, nil
+}
+
 func (fakeService) RecomputeAccountRating(_ context.Context, req admin.RecomputeAccountRatingRequest) (admin.CommandResult, error) {
 	return admin.CommandResult{CommandID: req.CommandID, Status: "completed", DryRun: req.DryRun}, nil
 }

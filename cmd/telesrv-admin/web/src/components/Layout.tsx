@@ -6,6 +6,7 @@ import {
   Database,
   Gavel,
 	Film,
+  Globe2,
   LayoutDashboard,
   LogOut,
   MessageSquareText,
@@ -126,6 +127,7 @@ export function Shell({
           )}
           <NavLink icon={<AtSign size={16} />} href="/collectible-usernames" route={route} navigate={navigate}>{t("layout.collectibleUsernames")}</NavLink>
           <NavLink icon={<Phone size={16} />} href="/collectible-phones" route={route} navigate={navigate}>{t("layout.collectiblePhones")}</NavLink>
+          <NavLink icon={<Globe2 size={16} />} href="/countries" route={route} navigate={navigate}>{t("layout.countries")}</NavLink>
           <NavLink icon={<Trophy size={16} />} href="/account-ratings" route={route} navigate={navigate}>{t("layout.accountRatings")}</NavLink>
           <NavLink icon={<Rss size={16} />} href="/auto-subscribe-channels" route={route} navigate={navigate}>{t("layout.autoSubscribeChannels")}</NavLink>
 		  <NavLink icon={<Database size={16} />} href="/storage" route={route} navigate={navigate}>{t("layout.storage")}</NavLink>

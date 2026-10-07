@@ -8,6 +8,7 @@ import { AutoSubscribeChannelsPage } from "./AutoSubscribeChannelsPage";
 import { CollectibleUsernameDetailPage } from "./CollectibleUsernameDetailPage";
 import { CollectibleUsernamesPage } from "./CollectibleUsernamesPage";
 import { CollectiblePhonesPage } from "./CollectiblePhonesPage";
+import { CountriesPage } from "./CountriesPage";
 import { ChannelDetailPage } from "./ChannelDetailPage";
 import { ChannelsPage } from "./ChannelsPage";
 import { BotDetailPage } from "./BotDetailPage";
@@ -94,6 +95,9 @@ export function Routes({ route, navigate }: { route: RouteState; navigate: Navig
   }
   if (route.path === "/collectible-phones") {
     return <CollectiblePhonesPage />;
+  }
+  if (route.path === "/countries") {
+    return <CountriesPage />;
   }
   if (route.path === "/account-ratings") {
     return <AccountRatingsPage navigate={navigate} />;

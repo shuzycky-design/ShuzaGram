@@ -157,3 +157,12 @@ func (q *Queries) UpsertCountryCode(ctx context.Context, arg UpsertCountryCodePa
 	)
 	return err
 }
+
+const deleteCountry = `-- name: DeleteCountry :exec
+DELETE FROM countries WHERE iso2 = $1
+`
+
+func (q *Queries) DeleteCountry(ctx context.Context, iso2 string) error {
+	_, err := q.db.Exec(ctx, deleteCountry, iso2)
+	return err
+}

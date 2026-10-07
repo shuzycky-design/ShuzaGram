@@ -127,6 +127,9 @@ func (s *server) routes() http.Handler {
 	// already picked a name for a separate one.
 	mux.Handle("GET /api/collectible-phones", s.scopedRoute(permissionUsernamesRead, http.HandlerFunc(s.handleCollectiblePhonesAPI)))
 	mux.Handle("GET /api/collectible-phones/{id}", s.scopedRoute(permissionUsernamesRead, http.HandlerFunc(s.handleCollectiblePhoneDetailAPI)))
+	mux.Handle("GET /api/countries", s.scopedRoute(permissionContentRead, http.HandlerFunc(s.handleListCountriesAPI)))
+	mux.Handle("POST /api/actions/upsert-country", s.scopedRoute(permissionContentManage, http.HandlerFunc(s.handleUpsertCountryAPI)))
+	mux.Handle("POST /api/actions/delete-country", s.scopedRoute(permissionContentManage, http.HandlerFunc(s.handleDeleteCountryAPI)))
 	mux.Handle("GET /api/account-ratings", s.scopedRoute(permissionAccountsRead, http.HandlerFunc(s.handleAccountRatingsAPI)))
 	mux.Handle("GET /api/account-ratings/{user_id}", s.scopedRoute(permissionAccountsRead, http.HandlerFunc(s.handleAccountRatingDetailAPI)))
 	mux.Handle("GET /api/storage/stats", s.scopedRoute(permissionStorageRead, http.HandlerFunc(s.handleStorageStatsAPI)))
@@ -1333,6 +1336,77 @@ func (s *server) handleDeleteGifCatalogEntryAPI(w http.ResponseWriter, r *http.R
 	}
 	req := admin.DeleteGifCatalogEntryRequest{CommandMeta: s.commandMetaFromAPI(r, body.CommandID, body.Reason, body.Confirm, "delete-gif"), ID: body.ID}
 	result, err := s.callAdminAPI(r.Context(), "/v1/gif-catalog/delete", req)
+	writeCommandResultAPI(w, result, err)
+}
+
+func (s *server) handleListCountriesAPI(w http.ResponseWriter, r *http.Request) {
+	if s.read == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "read store is not configured")
+		return
+	}
+	rows, err := s.read.ListCountries(r.Context())
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"countries": rows})
+}
+
+type upsertCountryCodeAPIInput struct {
+	CountryCode string   `json:"country_code"`
+	Prefixes    []string `json:"prefixes"`
+	Patterns    []string `json:"patterns"`
+}
+
+type upsertCountryAPIRequest struct {
+	CommandID   string                      `json:"command_id"`
+	Reason      string                      `json:"reason"`
+	Confirm     bool                        `json:"confirm"`
+	ISO2        string                      `json:"iso2"`
+	DefaultName string                      `json:"default_name"`
+	Name        string                      `json:"name"`
+	Hidden      bool                        `json:"hidden"`
+	Codes       []upsertCountryCodeAPIInput `json:"codes"`
+}
+
+func (s *server) handleUpsertCountryAPI(w http.ResponseWriter, r *http.Request) {
+	var body upsertCountryAPIRequest
+	if !decodeAction(w, r, &body) {
+		return
+	}
+	codes := make([]admin.UpsertCountryCodeInput, 0, len(body.Codes))
+	for _, c := range body.Codes {
+		codes = append(codes, admin.UpsertCountryCodeInput{CountryCode: c.CountryCode, Prefixes: c.Prefixes, Patterns: c.Patterns})
+	}
+	req := admin.UpsertCountryRequest{
+		CommandMeta: s.commandMetaFromAPI(r, body.CommandID, body.Reason, body.Confirm, "upsert-country"),
+		ISO2:        body.ISO2,
+		DefaultName: body.DefaultName,
+		Name:        body.Name,
+		Hidden:      body.Hidden,
+		Codes:       codes,
+	}
+	result, err := s.callAdminAPI(r.Context(), "/v1/countries/upsert", req)
+	writeCommandResultAPI(w, result, err)
+}
+
+type deleteCountryAPIRequest struct {
+	CommandID string `json:"command_id"`
+	Reason    string `json:"reason"`
+	Confirm   bool   `json:"confirm"`
+	ISO2      string `json:"iso2"`
+}
+
+func (s *server) handleDeleteCountryAPI(w http.ResponseWriter, r *http.Request) {
+	var body deleteCountryAPIRequest
+	if !decodeAction(w, r, &body) {
+		return
+	}
+	req := admin.DeleteCountryRequest{
+		CommandMeta: s.commandMetaFromAPI(r, body.CommandID, body.Reason, body.Confirm, "delete-country"),
+		ISO2:        body.ISO2,
+	}
+	result, err := s.callAdminAPI(r.Context(), "/v1/countries/delete", req)
 	writeCommandResultAPI(w, result, err)
 }
 

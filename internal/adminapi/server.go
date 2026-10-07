@@ -114,6 +114,9 @@ type Service interface {
 	CollectibleUsernames(ctx context.Context, filter domain.CollectibleUsernameFilter) ([]domain.CollectibleUsername, error)
 	CollectibleUsernameByID(ctx context.Context, id int64) (domain.CollectibleUsername, error)
 	CollectibleUsernameTransfers(ctx context.Context, collectibleID int64, limit int) ([]domain.CollectibleUsernameTransfer, error)
+	Countries(ctx context.Context) (domain.CountriesList, error)
+	UpsertCountry(ctx context.Context, req admin.UpsertCountryRequest) (admin.CommandResult, error)
+	DeleteCountry(ctx context.Context, req admin.DeleteCountryRequest) (admin.CommandResult, error)
 	RecomputeAccountRating(ctx context.Context, req admin.RecomputeAccountRatingRequest) (admin.CommandResult, error)
 	AdjustAccountRating(ctx context.Context, req admin.AdjustAccountRatingRequest) (admin.CommandResult, error)
 	AccountRating(ctx context.Context, userID int64) (domain.AccountRating, error)
@@ -312,6 +315,9 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /v1/collectible-phones/delete", s.authenticated(s.handleDeleteCollectiblePhone))
 	mux.HandleFunc("GET /v1/collectible-phones", s.authenticated(s.handleCollectiblePhones))
 	mux.HandleFunc("GET /v1/collectible-phones/{id}", s.authenticated(s.handleCollectiblePhone))
+	mux.HandleFunc("GET /v1/countries", s.authenticated(s.handleCountries))
+	mux.HandleFunc("POST /v1/countries/upsert", s.authenticated(s.handleUpsertCountry))
+	mux.HandleFunc("POST /v1/countries/delete", s.authenticated(s.handleDeleteCountry))
 	mux.HandleFunc("POST /v1/account-ratings/recompute", s.authenticated(s.handleRecomputeAccountRating))
 	mux.HandleFunc("POST /v1/account-ratings/adjust", s.authenticated(s.handleAdjustAccountRating))
 	mux.HandleFunc("GET /v1/account-ratings", s.authenticated(s.handleAccountRatings))
@@ -1754,6 +1760,51 @@ func (s *Server) handleDeleteCollectibleUsername(w http.ResponseWriter, r *http.
 		return
 	}
 	result, err := s.svc.DeleteCollectibleUsername(r.Context(), req)
+	writeCommandResult(w, result, err)
+}
+
+func (s *Server) handleCountries(w http.ResponseWriter, r *http.Request) {
+	list, err := s.svc.Countries(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	countries := make([]map[string]any, 0, len(list.Countries))
+	for _, c := range list.Countries {
+		codes := make([]map[string]any, 0, len(c.CountryCodes))
+		for _, cc := range c.CountryCodes {
+			codes = append(codes, map[string]any{
+				"country_code": cc.CountryCode,
+				"prefixes":     cc.Prefixes,
+				"patterns":     cc.Patterns,
+			})
+		}
+		countries = append(countries, map[string]any{
+			"iso2":          c.ISO2,
+			"default_name":  c.DefaultName,
+			"name":          c.Name,
+			"hidden":        c.Hidden,
+			"country_codes": codes,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"countries": countries})
+}
+
+func (s *Server) handleUpsertCountry(w http.ResponseWriter, r *http.Request) {
+	var req admin.UpsertCountryRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	result, err := s.svc.UpsertCountry(r.Context(), req)
+	writeCommandResult(w, result, err)
+}
+
+func (s *Server) handleDeleteCountry(w http.ResponseWriter, r *http.Request) {
+	var req admin.DeleteCountryRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	result, err := s.svc.DeleteCountry(r.Context(), req)
 	writeCommandResult(w, result, err)
 }
 

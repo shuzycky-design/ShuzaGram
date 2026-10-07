@@ -524,6 +524,29 @@ export type CollectiblePhoneTransfer = {
 export type CollectiblePhoneListResponse = { assets: CollectiblePhoneRow[] | null };
 export type CollectiblePhoneDetail = { asset: CollectiblePhoneRow; transfers: CollectiblePhoneTransfer[] | null };
 
+// CountryCode / Country mirror domain.CountryCode / domain.Country -- one
+// entry of the login-screen country/dialing-code catalog (help.getCountriesList).
+// An ISO2 that doesn't collide with the built-in ~235-country set is a
+// genuinely new, self-hosted entry; reusing a real one edits it, but the
+// startup catalog reseed silently reverts that edit on next restart.
+export type CountryCode = {
+  country_code: string;
+  prefixes: string[] | null;
+  patterns: string[] | null;
+};
+
+export type Country = {
+  iso2: string;
+  default_name: string;
+  name: string;
+  hidden: boolean;
+  country_codes: CountryCode[] | null;
+};
+
+export type CountryListResponse = {
+  countries: Country[] | null;
+};
+
 export type AccountRatingRow = {
   UserID: string;
   Username: string;

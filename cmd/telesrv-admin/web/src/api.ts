@@ -24,6 +24,7 @@ import type {
   CollectibleUsernameListResponse,
   CollectiblePhoneListResponse,
   CollectiblePhoneDetail,
+  CountryListResponse,
   CommandResult,
   DashboardResponse,
   GroupMessageDetail,
@@ -179,6 +180,7 @@ export const api = {
     request<CollectiblePhoneListResponse>(`/api/collectible-phones?${params.toString()}`),
   collectiblePhone: (id: string) =>
     request<CollectiblePhoneDetail>(`/api/collectible-phones/${encodeURIComponent(id)}`),
+  countries: () => request<CountryListResponse>("/api/countries"),
   accountRatings: (params: URLSearchParams) =>
     request<AccountRatingListResponse>(`/api/account-ratings?${params.toString()}`),
   accountRating: (userID: string) =>

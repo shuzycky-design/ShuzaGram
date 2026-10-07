@@ -64,10 +64,13 @@ const defaultAppConfigHash = 30 // 默认 app config 内容变更时必须递增
 
 // Service 提供客户端启动配置与国家区号目录。
 //
-// app config 与国家区号属「启动后基本不变」的参考目录:运行期无写入(UpsertAppConfig/
-// UpsertCountries 仅 seed/迁移用),故各加载一次缓存进内存,之后所有 RPC 走内存、不再查库
-// (登录页/启动配置是高频握手路径)。运维改库需重启生效。timezones/emoji 等其余目录走
-// internal/seed/catalog(go:embed 一次解析),本就在内存。
+// app config 属「启动后基本不变」的参考目录:运行期无写入(UpsertAppConfig 仅 seed/
+// 迁移用),故加载一次缓存进内存,之后所有 RPC 走内存、不再查库(登录页/启动配置是
+// 高频握手路径)。国家区号则不同——internal/admin 的管理面板可在运行期随时新增/修改
+// 区号(见 admin.Service.UpsertCountry/DeleteCountry,写入同一张 countries 表),
+// 因此 loadCountries 不缓存,每次都查库,让管理员改完立刻生效,不需要重启 telesrv。
+// timezones/emoji 等其余目录走
+// internal/seed/catalog(go:embed 一次解析),本就在内存,与本服务无关。
 type Service struct {
 	appConfigs    store.AppConfigStore
 	countries     store.CountryStore
@@ -77,8 +80,6 @@ type Service struct {
 
 	appConfigOnce  sync.Once
 	appConfigCache domain.AppConfig
-	countriesOnce  sync.Once
-	countriesCache domain.CountriesList
 }
 
 // Option 配置 help 服务运行期默认目录。
@@ -260,24 +261,29 @@ func (s *Service) loadAppConfig(ctx context.Context) domain.AppConfig {
 	return s.appConfigCache
 }
 
-// GetCountries 返回国家区号目录，hash 命中时返回 notModified。首次调用加载一次后缓存。
+// GetCountries 返回国家区号目录，hash 命中时返回 notModified。
 func (s *Service) GetCountries(ctx context.Context, langCode string, hash int) (domain.CountriesList, bool, error) {
 	list := s.loadCountries(ctx)
 	return list, hash != 0 && hash == list.Hash, nil
 }
 
+// loadCountries queries the store on every call, unlike loadAppConfig's
+// once-per-process cache: the admin panel's country-code tool
+// (internal/admin/service.go's UpsertCountry/DeleteCountry) edits this data
+// live, and an operator adding/fixing a code expects the very next
+// help.getCountriesList (next login-page load, not the next server
+// restart) to reflect it. This RPC is a low-frequency, mostly-once-per-
+// session handshake, not the hot path appConfigOnce's doc comment is about,
+// so a bare query per call is the right tradeoff.
 func (s *Service) loadCountries(ctx context.Context) domain.CountriesList {
 	if s == nil || s.countries == nil {
 		return defaultCountries()
 	}
-	s.countriesOnce.Do(func() {
-		list, err := s.countries.ListCountries(ctx, "")
-		if err != nil || len(list.Countries) == 0 {
-			list = defaultCountries()
-		}
-		s.countriesCache = list
-	})
-	return s.countriesCache
+	list, err := s.countries.ListCountries(ctx, "")
+	if err != nil || len(list.Countries) == 0 {
+		return defaultCountries()
+	}
+	return list
 }
 
 // defaultCountries 返回内置国家区号目录:优先用 catalog 固化的官方全量(~235 国),

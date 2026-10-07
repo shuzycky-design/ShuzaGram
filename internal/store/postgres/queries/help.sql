@@ -41,3 +41,6 @@ ON CONFLICT (iso2, country_code) DO UPDATE SET
   prefixes = EXCLUDED.prefixes,
   patterns = EXCLUDED.patterns,
   order_index = EXCLUDED.order_index;
+
+-- name: DeleteCountry :exec
+DELETE FROM countries WHERE iso2 = $1;

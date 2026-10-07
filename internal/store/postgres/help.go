@@ -117,6 +117,13 @@ func (s *HelpStore) UpsertCountries(ctx context.Context, countries []domain.Coun
 	return nil
 }
 
+func (s *HelpStore) DeleteCountry(ctx context.Context, iso2 string) error {
+	if err := s.q.DeleteCountry(ctx, iso2); err != nil {
+		return fmt.Errorf("delete country %q: %w", iso2, err)
+	}
+	return nil
+}
+
 func countriesHash(countries []domain.Country) int {
 	if len(countries) == 0 {
 		return 0

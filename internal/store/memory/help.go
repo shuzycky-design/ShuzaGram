@@ -55,3 +55,16 @@ func (s *HelpStore) UpsertCountries(_ context.Context, countries []domain.Countr
 	s.mu.Unlock()
 	return nil
 }
+
+func (s *HelpStore) DeleteCountry(_ context.Context, iso2 string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := s.countries.Countries[:0:0]
+	for _, c := range s.countries.Countries {
+		if c.ISO2 != iso2 {
+			out = append(out, c)
+		}
+	}
+	s.countries.Countries = out
+	return nil
+}

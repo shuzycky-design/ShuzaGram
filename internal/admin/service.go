@@ -84,6 +84,10 @@ const (
 	ActionTransferCollectiblePhone    = "phones.collectible.transfer"
 	ActionRevokeCollectiblePhone      = "phones.collectible.revoke"
 	ActionDeleteCollectiblePhone      = "phones.collectible.delete"
+	// Login-screen country/dialing-code catalog (help.getCountriesList). See
+	// CountriesService.
+	ActionUpsertCountry = "countries.upsert"
+	ActionDeleteCountry = "countries.delete"
 	// Composite account rating.
 	ActionRecomputeAccountRating = "rating.recompute"
 	ActionAdjustAccountRating    = "rating.adjust"
@@ -451,6 +455,18 @@ type CollectiblePhonesService interface {
 	CollectiblePhoneTransfers(context.Context, int64, int) ([]domain.CollectiblePhoneTransfer, error)
 }
 
+// CountriesService is the login-screen country/dialing-code catalog store
+// boundary (help.getCountriesList). ListCountries/UpsertCountries already
+// match store.CountryStore exactly, so *postgres.HelpStore satisfies this
+// directly with no adapter. Every write goes through UpsertCountries even for
+// one country -- the store upserts by ISO2 (country) / ISO2+code (country
+// code), so a single-element slice never disturbs any other row.
+type CountriesService interface {
+	ListCountries(ctx context.Context, langCode string) (domain.CountriesList, error)
+	UpsertCountries(ctx context.Context, countries []domain.Country) error
+	DeleteCountry(ctx context.Context, iso2 string) error
+}
+
 // collectibleUsernameByIDLookup is the optional by-identity read. Stores that
 // expose it answer a detail request in one round trip; the keyset fallback in
 // CollectibleUsernameByID keeps a service without it correct.
@@ -513,7 +529,10 @@ type Dependencies struct {
 	// BotVerification is the third-party mechanism, wired separately from
 	// Verification: the two never read each other's state.
 	BotVerification BotVerificationService
-	Now             func() time.Time
+	// Countries is the login-screen country/dialing-code catalog store
+	// boundary -- see CountriesService.
+	Countries CountriesService
+	Now       func() time.Time
 }
 
 type Service struct {
@@ -550,6 +569,7 @@ type Service struct {
 	rating                 AccountRatingService
 	verification           VerificationService
 	botVerification        BotVerificationService
+	countries              CountriesService
 	now                    func() time.Time
 }
 
@@ -657,6 +677,9 @@ func (s *Service) Configure(deps Dependencies) *Service {
 	}
 	if deps.BotVerification != nil {
 		s.botVerification = deps.BotVerification
+	}
+	if deps.Countries != nil {
+		s.countries = deps.Countries
 	}
 	if deps.Now != nil {
 		s.now = deps.Now
@@ -3007,6 +3030,168 @@ func (s *Service) DeleteCollectiblePhone(ctx context.Context, req DeleteCollecti
 		s.notifyCollectiblePhoneOwners(ctx, a.OwnerUserID, 0)
 		return CommandResult{Message: "collectible phone deleted", Details: details}, nil
 	})
+}
+
+// Countries returns the full login-screen country/dialing-code catalog
+// (help.getCountriesList), including every custom entry added via
+// UpsertCountry -- the admin UI's read side for the country-code tool.
+func (s *Service) Countries(ctx context.Context) (domain.CountriesList, error) {
+	if s == nil || s.countries == nil {
+		return domain.CountriesList{}, fmt.Errorf("country catalog dependency is not configured")
+	}
+	return s.countries.ListCountries(ctx, "")
+}
+
+// UpsertCountryCodeInput is one dialing-code row (a country can have more
+// than one, e.g. NANP members sharing "1" with different prefixes).
+type UpsertCountryCodeInput struct {
+	CountryCode string   `json:"country_code"`
+	Prefixes    []string `json:"prefixes,omitempty"`
+	Patterns    []string `json:"patterns,omitempty"`
+}
+
+// UpsertCountryRequest adds or edits one country/dialing-code-set entry.
+// ISO2 is the key: an ISO2 that doesn't collide with the ~235-country
+// built-in catalog (see cmd/telesrv/main.go's startup reseed) makes this a
+// genuinely new, self-hosted entry that survives every restart untouched;
+// reusing a real ISO2 edits that country, but the next restart's catalog
+// reseed silently overwrites it back to the official values, since the
+// reseed's UpsertCountries always wins the ON CONFLICT for real ISO2s.
+type UpsertCountryRequest struct {
+	CommandMeta
+	ISO2        string                   `json:"iso2"`
+	DefaultName string                   `json:"default_name"`
+	Name        string                   `json:"name,omitempty"`
+	Hidden      bool                     `json:"hidden"`
+	Codes       []UpsertCountryCodeInput `json:"codes"`
+}
+
+// DeleteCountryRequest removes one country and its dialing codes entirely
+// (ON DELETE CASCADE). Deleting a real, catalog-backed ISO2 is pointless --
+// the next restart's reseed brings it right back -- so this is really only
+// useful for retracting a custom entry.
+type DeleteCountryRequest struct {
+	CommandMeta
+	ISO2 string `json:"iso2"`
+}
+
+func (s *Service) UpsertCountry(ctx context.Context, req UpsertCountryRequest) (CommandResult, error) {
+	if s == nil || s.countries == nil {
+		return CommandResult{}, fmt.Errorf("country catalog dependency is not configured")
+	}
+	iso2 := strings.ToUpper(strings.TrimSpace(req.ISO2))
+	defaultName := strings.TrimSpace(req.DefaultName)
+	name := strings.TrimSpace(req.Name)
+	if len(iso2) < 2 || len(iso2) > 4 {
+		return CommandResult{}, fmt.Errorf("iso2 must be 2-4 letters")
+	}
+	for _, r := range iso2 {
+		if r < 'A' || r > 'Z' {
+			return CommandResult{}, fmt.Errorf("iso2 must be A-Z letters only")
+		}
+	}
+	if defaultName == "" {
+		return CommandResult{}, fmt.Errorf("default_name is required")
+	}
+	if len(req.Codes) == 0 {
+		return CommandResult{}, fmt.Errorf("at least one country code is required")
+	}
+	country := domain.Country{ISO2: iso2, DefaultName: defaultName, Name: name, Hidden: req.Hidden}
+	for _, c := range req.Codes {
+		code := strings.TrimSpace(c.CountryCode)
+		if code == "" {
+			return CommandResult{}, fmt.Errorf("country_code is required")
+		}
+		for _, r := range code {
+			if r < '0' || r > '9' {
+				return CommandResult{}, fmt.Errorf("country_code %q must be digits only", code)
+			}
+		}
+		patterns := trimmedNonEmptyStrings(c.Patterns)
+		for _, p := range patterns {
+			if err := validateCountryCodePattern(p); err != nil {
+				return CommandResult{}, fmt.Errorf("pattern %q for code %q: %w", p, code, err)
+			}
+		}
+		country.CountryCodes = append(country.CountryCodes, domain.CountryCode{
+			CountryCode: code,
+			Prefixes:    trimmedNonEmptyStrings(c.Prefixes),
+			Patterns:    patterns,
+		})
+	}
+	details := map[string]any{"iso2": iso2, "default_name": defaultName, "codes": len(country.CountryCodes)}
+	return s.runCommand(ctx, req.CommandMeta, ActionUpsertCountry, 0, domain.Peer{}, req, func() (CommandResult, error) {
+		if req.DryRun {
+			return CommandResult{Message: "country upsert validated", Details: details}, nil
+		}
+		if err := s.countries.UpsertCountries(ctx, []domain.Country{country}); err != nil {
+			return CommandResult{Details: details}, err
+		}
+		return CommandResult{Message: "country upserted", Details: details}, nil
+	})
+}
+
+func (s *Service) DeleteCountry(ctx context.Context, req DeleteCountryRequest) (CommandResult, error) {
+	if s == nil || s.countries == nil {
+		return CommandResult{}, fmt.Errorf("country catalog dependency is not configured")
+	}
+	iso2 := strings.ToUpper(strings.TrimSpace(req.ISO2))
+	if iso2 == "" {
+		return CommandResult{}, fmt.Errorf("iso2 is required")
+	}
+	details := map[string]any{"iso2": iso2}
+	return s.runCommand(ctx, req.CommandMeta, ActionDeleteCountry, 0, domain.Peer{}, req, func() (CommandResult, error) {
+		if req.DryRun {
+			return CommandResult{Message: "country delete validated", Details: details}, nil
+		}
+		if err := s.countries.DeleteCountry(ctx, iso2); err != nil {
+			return CommandResult{Details: details}, err
+		}
+		return CommandResult{Message: "country deleted", Details: details}, nil
+	})
+}
+
+// validateCountryCodePattern enforces the exact character set the real
+// client's own pattern parser understands (LoginActivity.java's
+// invalidateCountryHint/formatString: `pattern.replace(" ","").replace("X",
+// "").replace("0","")`) -- uppercase Latin 'X' as the placeholder, ASCII
+// digits for a genuinely fixed sub-prefix (real precedent: Telegram's own
+// countries.txt has e.g. Malawi mobile numbers as "77 XXX XXXX"), and
+// spaces for grouping. Nothing else ever appears in the ~235-country
+// reference catalog (internal/seed/catalog) -- no "+", no non-ASCII.
+//
+// This exists because that parser fails silently, not loudly: an
+// unrecognized character (most dangerously Cyrillic "х", a byte-for-byte
+// visual twin of Latin "X" on a Cyrillic keyboard) is never stripped by the
+// three .replace() calls above, so the whole pattern is left over as a
+// literal string the typed digits will never match -- the phone field's
+// format hint ends up showing that raw, broken pattern text instead of a
+// clean placeholder, which is exactly what an operator sees as "invalid"
+// with no error anywhere to explain why.
+func validateCountryCodePattern(pattern string) error {
+	for _, r := range pattern {
+		if r == ' ' || r == 'X' || (r >= '0' && r <= '9') {
+			continue
+		}
+		if r == 'х' || r == 'Х' {
+			return fmt.Errorf("contains Cyrillic 'х', not Latin 'X' -- looks identical but the client will not recognize it as a placeholder")
+		}
+		return fmt.Errorf("must contain only digits, spaces, and uppercase Latin 'X' as the placeholder (found %q)", r)
+	}
+	return nil
+}
+
+// trimmedNonEmptyStrings trims each element and drops the ones left empty --
+// admin form inputs arrive as comma/newline-split text, which routinely
+// carries stray blank entries.
+func trimmedNonEmptyStrings(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		if v := strings.TrimSpace(s); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 func (s *Service) notifyCollectiblePhoneOwners(ctx context.Context, ids ...int64) {

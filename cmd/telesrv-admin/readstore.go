@@ -2781,3 +2781,57 @@ func clampBotVerificationLimit(limit int) int {
 	}
 	return limit
 }
+
+// CountryCodeRow is one dialing-code entry under a CountryRow.
+type CountryCodeRow struct {
+	CountryCode string   `json:"country_code"`
+	Prefixes    []string `json:"prefixes"`
+	Patterns    []string `json:"patterns"`
+}
+
+// CountryRow is one help.getCountriesList entry, admin-panel shaped.
+type CountryRow struct {
+	ISO2         string           `json:"iso2"`
+	DefaultName  string           `json:"default_name"`
+	Name         string           `json:"name"`
+	Hidden       bool             `json:"hidden"`
+	CountryCodes []CountryCodeRow `json:"country_codes"`
+}
+
+// ListCountries mirrors postgres.HelpStore.ListCountries's own JOIN/grouping
+// (see internal/store/postgres/help.go) -- the admin panel reads straight
+// from Postgres like every other list endpoint here, bypassing the adminapi
+// round-trip that mutations go through.
+func (s *readStore) ListCountries(ctx context.Context) ([]CountryRow, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT c.iso2, c.default_name, c.name, c.hidden, cc.country_code, cc.prefixes, cc.patterns
+		FROM countries c
+		JOIN country_codes cc ON cc.iso2 = c.iso2
+		ORDER BY c.order_index, c.iso2, cc.order_index, cc.country_code
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list countries: %w", err)
+	}
+	defer rows.Close()
+	byISO := make(map[string]int)
+	out := []CountryRow{}
+	for rows.Next() {
+		var iso2, defaultName, name, countryCode string
+		var hidden bool
+		var prefixes, patterns []string
+		if err := rows.Scan(&iso2, &defaultName, &name, &hidden, &countryCode, &prefixes, &patterns); err != nil {
+			return nil, fmt.Errorf("scan country: %w", err)
+		}
+		idx, ok := byISO[iso2]
+		if !ok {
+			idx = len(out)
+			byISO[iso2] = idx
+			out = append(out, CountryRow{ISO2: iso2, DefaultName: defaultName, Name: name, Hidden: hidden})
+		}
+		out[idx].CountryCodes = append(out[idx].CountryCodes, CountryCodeRow{CountryCode: countryCode, Prefixes: prefixes, Patterns: patterns})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list countries: %w", err)
+	}
+	return out, nil
+}
