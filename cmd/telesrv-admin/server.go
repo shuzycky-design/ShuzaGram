@@ -133,6 +133,7 @@ func (s *server) routes() http.Handler {
 	mux.Handle("GET /api/account-ratings", s.scopedRoute(permissionAccountsRead, http.HandlerFunc(s.handleAccountRatingsAPI)))
 	mux.Handle("GET /api/account-ratings/{user_id}", s.scopedRoute(permissionAccountsRead, http.HandlerFunc(s.handleAccountRatingDetailAPI)))
 	mux.Handle("GET /api/storage/stats", s.scopedRoute(permissionStorageRead, http.HandlerFunc(s.handleStorageStatsAPI)))
+	mux.Handle("GET /api/moderation/spam-restriction-settings", s.scopedRoute(permissionModerationReview, http.HandlerFunc(s.handleSpamRestrictionSettingsAPI)))
 	mux.Handle("GET /api/moderation/cases", s.scopedRoute(permissionModerationReview, http.HandlerFunc(s.handleModerationCasesAPI)))
 	mux.Handle("GET /api/moderation/cases/{id}", s.scopedRoute(permissionModerationReview, http.HandlerFunc(s.handleModerationCaseAPI)))
 	mux.Handle("GET /api/moderation/reports/{id}", s.scopedRoute(permissionModerationReview, http.HandlerFunc(s.handleModerationReportAPI)))
@@ -140,6 +141,8 @@ func (s *server) routes() http.Handler {
 	mux.Handle("POST /api/moderation/cases/{id}/decide", s.scopedRoute(permissionModerationReview, http.HandlerFunc(s.handleDecideModerationCaseAPI)))
 	mux.Handle("POST /api/moderation/cases/{id}/appeals/{appeal_id}/review", s.scopedRoute(permissionModerationReview, http.HandlerFunc(s.handleReviewModerationAppealAPI)))
 	mux.Handle("POST /api/actions/set-frozen", s.scopedRoute(permissionAccountsManage, http.HandlerFunc(s.handleSetAccountFrozenAPI)))
+	mux.Handle("POST /api/actions/set-spam-restriction", s.scopedRoute(permissionAccountsManage, http.HandlerFunc(s.handleSetSpamRestrictionAPI)))
+	mux.Handle("POST /api/actions/set-spam-restriction-settings", s.scopedRoute(permissionModerationReview, http.HandlerFunc(s.handleSetSpamRestrictionSettingsAPI)))
 	mux.Handle("POST /api/actions/grant-premium", s.premiumManage(s.handleGrantPremiumAPI))
 	mux.Handle("POST /api/actions/upsert-premium-plan", s.premiumManage(s.handleUpsertPremiumPlanAPI))
 	mux.Handle("POST /api/actions/grant-stars", s.scopedRoute(permissionAccountsManage, http.HandlerFunc(s.handleGrantStarsAPI)))
@@ -286,14 +289,29 @@ func actorFromContext(ctx context.Context) string {
 	return "admin"
 }
 
+// handleApp serves the embedded SPA bundle. embed.FS carries no real mtimes,
+// so http.FileServer never emits a Last-Modified/ETag for these files --
+// without an explicit Cache-Control, some browsers keep reusing a cached
+// index.html (and therefore its old hashed asset URLs) indefinitely across
+// deploys, since there is nothing for them to revalidate against. Vite's
+// asset filenames are content-hashed (changes whenever the content does), so
+// those are safe to cache aggressively forever; index.html and the SPA
+// fallback must always be revalidated so a new build is picked up on the
+// operator's very next load.
 func (s *server) handleApp(w http.ResponseWriter, r *http.Request) {
 	clean := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 	if clean != "." && clean != "" {
 		if info, err := fs.Stat(s.web, clean); err == nil && !info.IsDir() {
+			if strings.HasPrefix(clean, "assets/") {
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			} else {
+				w.Header().Set("Cache-Control", "no-cache")
+			}
 			s.webServer.ServeHTTP(w, r)
 			return
 		}
 	}
+	w.Header().Set("Cache-Control", "no-cache")
 	r2 := r.Clone(r.Context())
 	r2.URL.Path = "/"
 	s.webServer.ServeHTTP(w, r2)
@@ -887,6 +905,19 @@ func (s *server) handleAccountDetailAPI(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusOK, detail)
+}
+
+func (s *server) handleSpamRestrictionSettingsAPI(w http.ResponseWriter, r *http.Request) {
+	if s.read == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "read store is not configured")
+		return
+	}
+	settings, err := s.read.SpamRestrictionSettings(r.Context())
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, settings)
 }
 
 func (s *server) handleAccountAvatarAPI(w http.ResponseWriter, r *http.Request) {
@@ -1635,6 +1666,54 @@ func (s *server) handleSetAccountFrozenAPI(w http.ResponseWriter, r *http.Reques
 		AppealURL:   body.AppealURL,
 	}
 	result, err := s.callAdminAPI(r.Context(), "/v1/accounts/set-frozen", req)
+	writeCommandResultAPI(w, result, err)
+}
+
+type setSpamRestrictionAPIRequest struct {
+	CommandID     string `json:"command_id"`
+	Reason        string `json:"reason"`
+	Confirm       bool   `json:"confirm"`
+	UserID        int64  `json:"user_id"`
+	Tier          int    `json:"tier"`
+	ClearOverride bool   `json:"clear_override"`
+}
+
+func (s *server) handleSetSpamRestrictionAPI(w http.ResponseWriter, r *http.Request) {
+	var body setSpamRestrictionAPIRequest
+	if !decodeAction(w, r, &body) {
+		return
+	}
+	req := admin.SetSpamRestrictionRequest{
+		CommandMeta:   s.commandMetaFromAPI(r, body.CommandID, body.Reason, body.Confirm, "set-spam-restriction"),
+		UserID:        body.UserID,
+		Tier:          body.Tier,
+		ClearOverride: body.ClearOverride,
+	}
+	result, err := s.callAdminAPI(r.Context(), "/v1/accounts/set-spam-restriction", req)
+	writeCommandResultAPI(w, result, err)
+}
+
+type setSpamRestrictionSettingsAPIRequest struct {
+	CommandID      string `json:"command_id"`
+	Reason         string `json:"reason"`
+	Confirm        bool   `json:"confirm"`
+	Tier1Threshold int    `json:"tier1_threshold"`
+	Tier2Threshold int    `json:"tier2_threshold"`
+	DecayHours     int    `json:"decay_hours"`
+}
+
+func (s *server) handleSetSpamRestrictionSettingsAPI(w http.ResponseWriter, r *http.Request) {
+	var body setSpamRestrictionSettingsAPIRequest
+	if !decodeAction(w, r, &body) {
+		return
+	}
+	req := admin.SetSpamRestrictionSettingsRequest{
+		CommandMeta:    s.commandMetaFromAPI(r, body.CommandID, body.Reason, body.Confirm, "set-spam-restriction-settings"),
+		Tier1Threshold: body.Tier1Threshold,
+		Tier2Threshold: body.Tier2Threshold,
+		DecayHours:     body.DecayHours,
+	}
+	result, err := s.callAdminAPI(r.Context(), "/v1/moderation/set-spam-restriction-settings", req)
 	writeCommandResultAPI(w, result, err)
 }
 

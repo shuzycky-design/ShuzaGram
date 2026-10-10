@@ -41,8 +41,13 @@ func TestModerationCaseLifecycleAndNewReportsDuringAction(t *testing.T) {
 		t.Fatalf("cases=%+v err=%v", cases, err)
 	}
 	item := cases[0]
+	// Version stays at 1 across both reports: it's the claim/decide
+	// optimistic-concurrency token, not a generic change counter, and must
+	// not be bumped by report ingestion (see attachModerationReportToCase's
+	// matching comment) -- otherwise a report landing while a moderator is
+	// mid-review would spuriously invalidate their claim/decide.
 	if item.ReportCount != 2 || item.DistinctReporterCount != 2 ||
-		item.Version != 2 || item.Severity != domain.ModerationSeverityMedium {
+		item.Version != 1 || item.Severity != domain.ModerationSeverityMedium {
 		t.Fatalf("case aggregate=%+v", item)
 	}
 	claimed, err := store.ClaimModerationCase(ctx, item.ID, item.Version, "reviewer", now.Add(2*time.Second))

@@ -402,6 +402,13 @@ func callProtocolFlagsInvalidErr() error {
 
 func userIsBlockedErr() error         { return tgerr.New(400, "USER_IS_BLOCKED") }
 func userPrivacyRestrictedErr() error { return tgerr.New(403, "USER_PRIVACY_RESTRICTED") }
+
+// spamRestrictedPrivateErr is returned when a sender currently under a
+// graduated spam-report restriction (see domain.SpamRestriction) tries to
+// message a peer their current tier does not permit. 403, not the 420 used
+// by account-wide freeze: this is a narrower "forbidden with this specific
+// peer" condition, same convention as USER_PRIVACY_RESTRICTED.
+func spamRestrictedPrivateErr() error { return tgerr.New(403, "SPAM_RESTRICTED_PRIVATE_FORBIDDEN") }
 func chatSendVoicesForbiddenErr() error {
 	return tgerr.New(403, "CHAT_SEND_VOICES_FORBIDDEN")
 }

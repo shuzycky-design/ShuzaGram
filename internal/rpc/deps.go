@@ -531,6 +531,21 @@ type AccountFreezeNotificationService interface {
 	CompleteAccountFreezeNotification(ctx context.Context, id, version int64, now time.Time) error
 }
 
+// SpamRestrictionService exposes the per-user spam-report restriction tier
+// used by the private-message gate (see spam_restriction_gate.go). Separate
+// from AccountFreezeService: this is an independent, narrower gate (private
+// messaging only, peer-scoped) rather than a binary account-wide fact.
+type SpamRestrictionService interface {
+	SpamRestriction(ctx context.Context, userID int64) (domain.SpamRestriction, bool, error)
+}
+
+// SpamBotNotifier delivers @spambot's proactive "your restriction tier
+// changed" message, implemented by *bots.Service
+// (NotifySpamRestrictionTierChanged).
+type SpamBotNotifier interface {
+	NotifySpamRestrictionTierChanged(ctx context.Context, userID int64, tier domain.SpamRestrictionTier) error
+}
+
 // UpdatesService 抽象 update 状态查询。
 type UpdatesService interface {
 	GetState(ctx context.Context, authKeyID [8]byte, userID int64) (domain.UpdateState, error)
@@ -589,6 +604,11 @@ type ContactsService interface {
 	ClearPersonalPhoto(ctx context.Context, userID, contactUserID int64, date int) (domain.Contact, error)
 	PersonalPhotos(ctx context.Context, userID int64, contactUserIDs []int64) (map[int64]domain.ProfilePhotoRef, error)
 	GetPeerSettings(ctx context.Context, userID int64, peer domain.Peer) (domain.PeerSettings, error)
+	// ContactRelationship reports whether peerUserID is in userID's contact
+	// list (found) and, if so, whether the relationship is mutual -- the
+	// facts the spam-restriction gate needs for its tier1 ("any contact")
+	// vs tier2 ("mutual contacts only") exemptions.
+	ContactRelationship(ctx context.Context, userID, peerUserID int64) (found, mutual bool, err error)
 	MutateBlocklist(ctx context.Context, mutation store.BlocklistMutation, effects store.DeliveryEffectsBuilder[store.BlocklistMutationSnapshot]) (store.BlocklistMutationSnapshot, error)
 	IsBlocked(ctx context.Context, userID, peerUserID int64) (bool, error)
 	GetBlocked(ctx context.Context, userID int64, offset, limit int) (domain.BlockedContactList, error)
@@ -1126,6 +1146,8 @@ type Deps struct {
 	AppUpdates                 updatecdn.Resolver
 	AccountFreeze              AccountFreezeService
 	AccountFreezeNotifications AccountFreezeNotificationService
+	SpamRestrictions           SpamRestrictionService
+	SpamBotNotifier            SpamBotNotifier
 	AICompose                  AIComposeService
 	Ephemeral                  EphemeralService
 	EphemeralPush              store.EphemeralPushBroker

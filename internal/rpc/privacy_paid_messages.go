@@ -120,6 +120,9 @@ func (r *Router) ensurePrivateContactAllowed(
 	if allowPaidStars < 0 || messageCount < 1 {
 		return 0, starsAmountInvalidErr()
 	}
+	if err := r.ensureSpamRestrictionAllowed(ctx, senderUserID, recipientUserID); err != nil {
+		return 0, err
+	}
 	requirement, err := r.privateContactRestrictionFor(ctx, senderUserID, recipientUserID)
 	if err != nil {
 		return 0, err

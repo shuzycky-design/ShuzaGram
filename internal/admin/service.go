@@ -25,6 +25,9 @@ import (
 )
 
 const (
+	ActionSetSpamRestriction         = "account.set_spam_restriction"
+	ActionSetSpamRestrictionSettings = "moderation.set_spam_restriction_settings"
+	ActionInjectTestReports          = "moderation.inject_test_reports"
 	ActionSetAccountFrozen        = "account.set_frozen"
 	ActionGrantPremium            = "account.grant_premium"
 	ActionRefundPremium           = "account.refund_premium"
@@ -209,6 +212,18 @@ type CommandRepository interface {
 type RestrictionStore interface {
 	GetAccountFreeze(ctx context.Context, userID int64) (domain.AccountFreeze, bool, error)
 	SetAccountFreeze(ctx context.Context, freeze domain.AccountFreeze) (domain.AccountFreeze, error)
+}
+
+// SpamRestrictionAdminStore is the admin-facing surface of the graduated
+// spam-report restriction system (see internal/domain/spam_restriction.go
+// and internal/rpc/spam_restriction_gate.go). Kept separate from
+// RestrictionStore: that one is the binary account-freeze gate, this is the
+// independent three-tier private-messaging gate.
+type SpamRestrictionAdminStore interface {
+	SpamRestriction(ctx context.Context, userID int64) (domain.SpamRestriction, bool, error)
+	SetSpamRestriction(ctx context.Context, r domain.SpamRestriction) (domain.SpamRestriction, error)
+	SpamRestrictionSettings(ctx context.Context) (domain.SpamRestrictionSettings, error)
+	SetSpamRestrictionSettings(ctx context.Context, settings domain.SpamRestrictionSettings, actor string) (domain.SpamRestrictionSettings, error)
 }
 
 type accountFreezeBatchStore interface {
@@ -426,6 +441,12 @@ type ModerationService interface {
 	DecideCase(ctx context.Context, request domain.ModerationDecisionRequest) (domain.ModerationCaseDetail, bool, error)
 	SubmitAppeal(ctx context.Context, caseID, appellantUserID int64, text string, now time.Time) (domain.ModerationAppeal, bool, error)
 	ReviewAppeal(ctx context.Context, request domain.ModerationDecisionRequest) (domain.ModerationCaseDetail, bool, error)
+	// ReportPeer files one real report through the exact same application-layer
+	// path a genuine messages.report RPC call uses (evidence capture,
+	// validation, fingerprint dedup, moderation_cases attach, spam-restriction
+	// tier recalculation). InjectTestReports (below) reuses it so scripted test
+	// reports exercise the real pipeline instead of a shortcut.
+	ReportPeer(ctx context.Context, reporterUserID int64, source domain.ModerationReportSource, target domain.Peer, reason domain.ModerationReason, option, comment string, createdAt time.Time) (domain.ModerationReport, bool, error)
 }
 
 // CollectibleUsernamesService is the operator-facing slice of the collectible
@@ -496,6 +517,7 @@ type GiftGranter interface {
 type Dependencies struct {
 	Commands               CommandRepository
 	Restrictions           RestrictionStore
+	SpamRestrictions       SpamRestrictionAdminStore
 	Auth                   AuthService
 	Revoker                AuthKeyRevoker
 	Users                  UsersService
@@ -538,6 +560,7 @@ type Dependencies struct {
 type Service struct {
 	commands               CommandRepository
 	restrictions           RestrictionStore
+	spamRestrictions       SpamRestrictionAdminStore
 	auth                   AuthService
 	revoker                AuthKeyRevoker
 	users                  UsersService
@@ -584,6 +607,9 @@ func (s *Service) Configure(deps Dependencies) *Service {
 	}
 	if deps.Restrictions != nil {
 		s.restrictions = deps.Restrictions
+	}
+	if deps.SpamRestrictions != nil {
+		s.spamRestrictions = deps.SpamRestrictions
 	}
 	if deps.Auth != nil {
 		s.auth = deps.Auth
@@ -1031,6 +1057,50 @@ type SetAccountFrozenRequest struct {
 	Frozen    bool      `json:"frozen"`
 	Until     time.Time `json:"freeze_until,omitempty"`
 	AppealURL string    `json:"freeze_appeal_url,omitempty"`
+}
+
+// SetSpamRestrictionRequest is the admin manual-override write for the
+// graduated spam-report restriction system. It always writes with
+// ManualOverride=true so neither the automatic moderation-report hook nor
+// the decay sweep touches the row again; setting Tier=0 clears the
+// restriction outright, and ClearOverride hands control back to the
+// automatic system without necessarily changing the current tier.
+type SetSpamRestrictionRequest struct {
+	CommandMeta
+	UserID        int64 `json:"user_id"`
+	Tier          int   `json:"tier"`
+	ClearOverride bool  `json:"clear_override,omitempty"`
+}
+
+// SetSpamRestrictionSettingsRequest edits the global, admin-tunable
+// thresholds and decay window driving automatic tier escalation/auto-lift.
+type SetSpamRestrictionSettingsRequest struct {
+	CommandMeta
+	Tier1Threshold int `json:"tier1_threshold"`
+	Tier2Threshold int `json:"tier2_threshold"`
+	DecayHours     int `json:"decay_hours"`
+}
+
+// InjectTestReportsRequest files one real moderation report per entry in
+// ReporterUserIDs against TargetUserID, through the exact same path a real
+// messages.report RPC call would use (see ModerationService.ReportPeer) --
+// built for scripted testing of the spam-restriction escalation pipeline
+// without manually reporting from the app with many throwaway accounts.
+// Every ReporterUserID must be a real, existing account; reports are
+// deduplicated by the same (reporter, fingerprint) rule a genuine report
+// uses, so re-running the same request is harmless.
+type InjectTestReportsRequest struct {
+	CommandMeta
+	TargetUserID    int64   `json:"target_user_id"`
+	ReporterUserIDs []int64 `json:"reporter_user_ids"`
+	// ReportReason is one of: spam, violence, pornography, child_abuse,
+	// other, copyright, geo_irrelevant, fake, illegal_drugs,
+	// personal_details (domain.ModerationReason). Deliberately a distinct
+	// JSON key from CommandMeta's own "reason" (the operator's audit-log
+	// justification for running this command at all).
+	ReportReason string `json:"report_reason"`
+	Option       string `json:"option,omitempty"`
+	Comment      string `json:"comment,omitempty"`
 }
 
 type GrantPremiumRequest struct {
@@ -1630,6 +1700,87 @@ func (s *Service) SetAccountFrozen(ctx context.Context, req SetAccountFrozenRequ
 			details["notify_error"] = err.Error()
 		}
 		return CommandResult{Message: "account freeze updated", Details: details}, nil
+	})
+}
+
+func (s *Service) SetSpamRestriction(ctx context.Context, req SetSpamRestrictionRequest) (CommandResult, error) {
+	if req.UserID <= 0 {
+		return CommandResult{}, fmt.Errorf("user_id is required")
+	}
+	if req.Tier < 0 || req.Tier > 2 {
+		return CommandResult{}, fmt.Errorf("tier must be 0, 1 or 2")
+	}
+	if s == nil || s.spamRestrictions == nil {
+		return CommandResult{}, fmt.Errorf("admin spam restriction store is not configured")
+	}
+	now := s.now().UTC()
+	return s.runCommand(ctx, req.CommandMeta, ActionSetSpamRestriction, req.UserID, domain.Peer{}, req, func() (CommandResult, error) {
+		prev, found, err := s.spamRestrictions.SpamRestriction(ctx, req.UserID)
+		if err != nil {
+			return CommandResult{}, err
+		}
+		next := domain.SpamRestriction{
+			UserID:                req.UserID,
+			Tier:                  domain.SpamRestrictionTier(req.Tier),
+			CaseID:                prev.CaseID,
+			DistinctReporterCount: prev.DistinctReporterCount,
+			LastReportAt:          prev.LastReportAt,
+			ManualOverride:        !req.ClearOverride,
+			Actor:                 req.Actor,
+			Reason:                req.Reason,
+		}
+		if next.LastReportAt.IsZero() {
+			next.LastReportAt = now
+		}
+		details := map[string]any{
+			"previous_tier": func() int {
+				if !found {
+					return 0
+				}
+				return int(prev.Tier)
+			}(),
+			"new_tier":       req.Tier,
+			"clear_override": req.ClearOverride,
+		}
+		if req.DryRun {
+			return CommandResult{Message: "dry-run completed", Details: details}, nil
+		}
+		updated, err := s.spamRestrictions.SetSpamRestriction(ctx, next)
+		if err != nil {
+			return CommandResult{}, err
+		}
+		details["updated_at"] = updated.UpdatedAt.UTC().Format(time.RFC3339)
+		details["version"] = updated.Version
+		return CommandResult{Message: "spam restriction updated", Details: details}, nil
+	})
+}
+
+func (s *Service) SetSpamRestrictionSettings(ctx context.Context, req SetSpamRestrictionSettingsRequest) (CommandResult, error) {
+	if req.Tier1Threshold <= 0 || req.Tier2Threshold <= req.Tier1Threshold || req.DecayHours <= 0 {
+		return CommandResult{}, fmt.Errorf("tier1_threshold and tier2_threshold must be positive with tier2 > tier1, and decay_hours must be positive")
+	}
+	if s == nil || s.spamRestrictions == nil {
+		return CommandResult{}, fmt.Errorf("admin spam restriction store is not configured")
+	}
+	return s.runCommand(ctx, req.CommandMeta, ActionSetSpamRestrictionSettings, 0, domain.Peer{}, req, func() (CommandResult, error) {
+		details := map[string]any{
+			"tier1_threshold": req.Tier1Threshold,
+			"tier2_threshold": req.Tier2Threshold,
+			"decay_hours":     req.DecayHours,
+		}
+		if req.DryRun {
+			return CommandResult{Message: "dry-run completed", Details: details}, nil
+		}
+		updated, err := s.spamRestrictions.SetSpamRestrictionSettings(ctx, domain.SpamRestrictionSettings{
+			Tier1Threshold: req.Tier1Threshold,
+			Tier2Threshold: req.Tier2Threshold,
+			DecayHours:     req.DecayHours,
+		}, req.Actor)
+		if err != nil {
+			return CommandResult{}, err
+		}
+		details["updated_at"] = updated.UpdatedAt.UTC().Format(time.RFC3339)
+		return CommandResult{Message: "spam restriction settings updated", Details: details}, nil
 	})
 }
 
@@ -2485,6 +2636,59 @@ func (s *Service) CreateBot(ctx context.Context, req CreateBotRequest) (CommandR
 			Details:          details,
 			transientDetails: map[string]any{"token": token},
 		}, nil
+	})
+}
+
+func (s *Service) InjectTestReports(ctx context.Context, req InjectTestReportsRequest) (CommandResult, error) {
+	if req.TargetUserID <= 0 {
+		return CommandResult{}, fmt.Errorf("target_user_id is required")
+	}
+	if len(req.ReporterUserIDs) == 0 {
+		return CommandResult{}, fmt.Errorf("reporter_user_ids must be non-empty")
+	}
+	reason := domain.ModerationReason(req.ReportReason)
+	if !reason.Valid() {
+		return CommandResult{}, fmt.Errorf("report_reason %q is not a valid moderation reason", req.ReportReason)
+	}
+	if s == nil || s.moderation == nil {
+		return CommandResult{}, fmt.Errorf("admin moderation dependency is not configured")
+	}
+	return s.runCommand(ctx, req.CommandMeta, ActionInjectTestReports, req.TargetUserID, domain.Peer{}, req, func() (CommandResult, error) {
+		details := map[string]any{
+			"target_user_id": req.TargetUserID,
+			"reporter_count": len(req.ReporterUserIDs),
+			"reason":         string(reason),
+		}
+		if req.DryRun {
+			return CommandResult{Message: "test report injection validated", Details: details}, nil
+		}
+		now := s.now().UTC()
+		target := domain.Peer{Type: domain.PeerTypeUser, ID: req.TargetUserID}
+		filed, deduped, failed := 0, 0, 0
+		var lastErr error
+		for _, reporterUserID := range req.ReporterUserIDs {
+			if reporterUserID <= 0 || reporterUserID == req.TargetUserID {
+				failed++
+				continue
+			}
+			_, created, err := s.moderation.ReportPeer(ctx, reporterUserID, domain.ModerationSourceAccountPeer, target, reason, req.Option, req.Comment, now)
+			switch {
+			case err != nil:
+				failed++
+				lastErr = err
+			case created:
+				filed++
+			default:
+				deduped++
+			}
+		}
+		details["filed"] = filed
+		details["deduped_as_repeat"] = deduped
+		details["failed"] = failed
+		if lastErr != nil {
+			details["last_error"] = lastErr.Error()
+		}
+		return CommandResult{Message: "test reports injected", Details: details}, nil
 	})
 }
 

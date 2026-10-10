@@ -37,6 +37,24 @@ export type RestrictionRow = {
   UpdatedAt: string;
 };
 
+export type SpamRestrictionRow = {
+  Tier: number;
+  DistinctReporterCount: number;
+  LastReportAt: string;
+  ManualOverride: boolean;
+  Actor: string;
+  Reason: string;
+  UpdatedAt: string;
+};
+
+export type SpamRestrictionSettings = {
+  Tier1Threshold: number;
+  Tier2Threshold: number;
+  DecayHours: number;
+  UpdatedAt: string;
+  UpdatedBy: string;
+};
+
 export type AuthorizationRow = {
   AuthKeyID: string;
   Hash: string;
@@ -79,6 +97,8 @@ export type AccountDetail = {
   StarsGranted: boolean;
   Restriction: RestrictionRow;
   HasRestriction: boolean;
+  SpamRestriction: SpamRestrictionRow;
+  HasSpamRestriction: boolean;
   Authorizations: AuthorizationRow[];
   AuditLogs: AuditLogRow[];
 };

@@ -22,6 +22,8 @@ export function AccountDetailPage({ id, navigate }: { id: number; navigate: Navi
   const [starsAmount, setStarsAmount] = useState("1000");
   const [freezeUntil, setFreezeUntil] = useState(() => toDateTimeLocal(new Date(Date.now() + 7 * 86400_000)));
   const [freezeAppealURL, setFreezeAppealURL] = useState("");
+  const [spamTier, setSpamTier] = useState("0");
+  const [spamClearOverride, setSpamClearOverride] = useState(false);
   const [avatarOpen, setAvatarOpen] = useState(false);
   const [avatarRefresh, setAvatarRefresh] = useState(0);
 
@@ -36,6 +38,9 @@ export function AccountDetailPage({ id, navigate }: { id: number; navigate: Navi
           setFreezeUntil(toDateTimeLocal(new Date(next.Restriction.Until)));
         }
         setFreezeAppealURL(next.Restriction.AppealURL || "");
+      }
+      if (next.HasSpamRestriction) {
+        setSpamTier(String(next.SpamRestriction.Tier));
       }
     } catch (err) {
       setError(errorMessage(err));
@@ -98,6 +103,14 @@ export function AccountDetailPage({ id, navigate }: { id: number; navigate: Navi
               <Summary label={t("account.freezeSince")} value={detail.Restriction.Since ? formatDate(detail.Restriction.Since) : t("common.none")} />
               <Summary label={t("account.freezeUntil")} value={detail.Restriction.Until ? formatDate(detail.Restriction.Until) : t("common.none")} />
               <Summary label={t("account.freezeAppealURL")} value={detail.Restriction.AppealURL || t("common.none")} />
+              <Summary
+                label={t("account.spamRestriction")}
+                value={
+                  detail.HasSpamRestriction && detail.SpamRestriction.Tier > 0
+                    ? `${detail.SpamRestriction.Tier === 2 ? t("account.spamRestrictionSevere") : t("account.spamRestrictionLimited")} (${detail.SpamRestriction.DistinctReporterCount}, ${detail.SpamRestriction.ManualOverride ? t("account.spamRestrictionManual") : t("account.spamRestrictionAuto")})`
+                    : t("account.spamRestrictionNone")
+                }
+              />
               <Summary label={t("account.createdAt")} value={formatDate(account.CreatedAt) || "-"} />
             </div>
             {detail.About && <p className="about-text">{detail.About}</p>}
@@ -154,6 +167,24 @@ export function AccountDetailPage({ id, navigate }: { id: number; navigate: Navi
                 onDone={load}
               />
             )}
+            <label className="duration-field">
+              <span>{t("account.spamRestrictionTier")}</span>
+              <select value={spamTier} onChange={(event) => setSpamTier(event.target.value)}>
+                <option value="0">{t("account.spamRestrictionNone")}</option>
+                <option value="1">{t("account.spamRestrictionLimited")}</option>
+                <option value="2">{t("account.spamRestrictionSevere")}</option>
+              </select>
+            </label>
+            <label className="checkline">
+              <input type="checkbox" checked={spamClearOverride} onChange={(event) => setSpamClearOverride(event.target.checked)} /> {t("account.clearSpamRestrictionOverride")}
+            </label>
+            <ActionButton
+              label={t("account.setSpamRestriction")}
+              icon={<CircleAlert size={15} />}
+              path="/api/actions/set-spam-restriction"
+              payload={() => ({ user_id: account.ID, tier: toInt(spamTier), clear_override: spamClearOverride })}
+              onDone={load}
+            />
             <label className="duration-field">
               <span>{t("account.premiumMonths")}</span>
               <input

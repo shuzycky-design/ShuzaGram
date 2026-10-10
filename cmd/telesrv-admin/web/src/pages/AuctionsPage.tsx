@@ -2,11 +2,11 @@ import { CheckCircle2, Gavel, Loader2, RefreshCw, ShieldCheck, Timer, Upload, X 
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { api, errorMessage } from "../api";
+import { StaticLottie } from "../components/StaticLottie";
 import { Alert, Badge, EmptyRow, Metric, PageFrame } from "../components/ui";
 import { useI18n, type TFunction } from "../i18n";
 import { formatUnix, localInputValue, toUnixSeconds } from "../lib/format";
 import type { CommandResult, StarGiftAuctionRow } from "../types";
-import { LottiePreview } from "./GiftsPage";
 
 // The tab authors both lifecycle kinds the engine understands: an auction runs the
 // supply through timed bidding rounds, a scheduled drop keeps a plain gift locked
@@ -155,7 +155,11 @@ function AuctionRow({ row, now }: { row: StarGiftAuctionRow; now: number }) {
 
   return (
     <tr className={row.Enabled ? "" : "gift-row-disabled"}>
-      <td><LottiePreview giftID={row.GiftID} revision={0} compact /></td>
+      <td>
+        <div className="gift-animation-shell compact">
+          <StaticLottie lazy cacheKey={row.GiftID} loader={() => api.giftAnimation(row.GiftID)} className="gift-animation" />
+        </div>
+      </td>
       <td>
         <div className="auction-cell">
           <strong>{row.Title || t("auctions.untitled")}</strong>

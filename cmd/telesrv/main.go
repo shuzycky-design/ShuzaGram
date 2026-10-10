@@ -812,6 +812,7 @@ func run(logger *zap.Logger) error {
 	}
 	authzStore := postgres.NewAuthorizationStore(pool)
 	adminStore := postgres.NewAdminStore(pool)
+	spamRestrictionStore := postgres.NewSpamRestrictionStore(pool)
 	updateStateStore := postgres.NewUpdateStateStore(pool)
 	updateEventStore := postgres.NewUpdateEventStore(pool, postgres.WithUpdateEventLogger(logger.Named("store").Named("updates")))
 	phoneChangeStore := postgres.NewPhoneChangeStore(pool)
@@ -1070,9 +1071,10 @@ func run(logger *zap.Logger) error {
 	rateLimiter := redisstore.NewRateLimiter(rdb)
 	activeSessions := mtprotoedge.NewSessionManager(logger.Named("mtprotoedge").Named("sessions"))
 	adminService := adminapp.NewService(adminapp.Dependencies{
-		Commands:      adminStore,
-		Restrictions:  adminStore,
-		OfficialGifts: officialgifts.New(cfg.OfficialGiftsDir),
+		Commands:         adminStore,
+		Restrictions:     adminStore,
+		SpamRestrictions: spamRestrictionStore,
+		OfficialGifts:    officialgifts.New(cfg.OfficialGiftsDir),
 	})
 	userProjectionFacts := userprojection.NewDurableUserProjectionFacts(
 		adminService,
@@ -1196,7 +1198,8 @@ func run(logger *zap.Logger) error {
 		botsapp.WithUserStickerSets(accountService),
 		botsapp.WithTelegramLogin(telegramLoginService),
 		botsapp.WithDialogRateLimiter(rateLimiter, cfg.VerificationBotRateLimit, cfg.VerificationBotRateWindow),
-		botsapp.WithPublicBaseURL(cfg.PublicBaseURL))
+		botsapp.WithPublicBaseURL(cfg.PublicBaseURL),
+		botsapp.WithSpamRestrictions(spamRestrictionStore))
 	// The built-in ChatBot and StickersBot are seeded with the default product
 	// name in their bio (users.about) and description (bots.description). Align
 	// them with the active branding on startup so the seeded "telesrv" text is
@@ -1632,6 +1635,8 @@ func run(logger *zap.Logger) error {
 		AppUpdates:                 appUpdateResolver,
 		AccountFreeze:              userProjectionFacts,
 		AccountFreezeNotifications: adminService,
+		SpamRestrictions:           spamRestrictionStore,
+		SpamBotNotifier:            botsService,
 		AICompose:                  aiComposeService,
 		Ephemeral:                  ephemeralService,
 		EphemeralPush:              ephemeralStore,
@@ -1851,6 +1856,8 @@ func run(logger *zap.Logger) error {
 	go router.RunPremiumSweeper(ctx, cfg.PremiumSweepInterval, cfg.PremiumSweepBatch)
 	go router.RunAccountLifecycle(ctx, time.Minute, 500)
 	go router.RunAccountFreezeNotifications(ctx, time.Minute, 500)
+	go router.RunSpamRestrictionDecay(ctx, 5*time.Minute, 500)
+	go router.RunSpamRestrictionNotifications(ctx, time.Minute, 200)
 	if telegramLoginService != nil {
 		go runTelegramLoginRetention(ctx, telegramLoginService, cfg.TelegramLoginRetention, cfg.TelegramLoginSweepInterval, cfg.TelegramLoginSweepBatch, logger.Named("telegram-login-retention"))
 	}

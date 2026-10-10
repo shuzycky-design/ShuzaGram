@@ -2,154 +2,169 @@
   color-scheme: light;
 
   /* Surfaces */
-  --bg: #eef1f5;
-  --bg-accent: #e7ecf1;
+  --bg: #eef1f6;
+  --bg-accent: #e5eaf2;
   --panel: #ffffff;
-  --panel-subtle: #f5f8fb;
-  --panel-strong: #eef2f6;
-  --surface-soft: #f2f7f6;
-  --overlay: rgba(24, 34, 47, 0.42);
-  --topbar-bg: rgba(255, 255, 255, 0.86);
+  --panel-subtle: #f6f8fc;
+  --panel-strong: #edf1f7;
+  --surface-soft: #eff8f5;
+  --overlay: rgba(20, 28, 40, 0.46);
+  --topbar-bg: rgba(255, 255, 255, 0.82);
 
   /* Lines */
-  --line: #e5eaf0;
-  --line-strong: #d3dce4;
+  --line: #e3e8f0;
+  --line-strong: #cfd8e4;
 
   /* Text */
-  --heading: #253040;
-  --text: #333f4d;
-  --text-soft: #45525f;
-  --muted: #6d7885;
-  --muted-2: #9aa4b1;
+  --heading: #1c2635;
+  --text: #303c4d;
+  --text-soft: #434f5e;
+  --muted: #6b7686;
+  --muted-2: #99a3b2;
 
-  /* Brand */
-  --brand: #1f7d6f;
-  --brand-strong: #196155;
-  --brand-2: #3a6cae;
-  --brand-tint: #e8f4f0;
-  --brand-tint-border: #c8e2db;
-  --brand-tint-text: #235d53;
+  /* Brand -- deeper, slightly more saturated teal-emerald than before, plus a
+     gradient pair used sparingly for the sidebar mark and a couple of
+     highlight accents. The hue family stays the same so the app still reads
+     as "itself", just less flat. */
+  --brand: #14836f;
+  --brand-strong: #0e6456;
+  --brand-2: #3568c4;
+  --brand-tint: #e4f5ef;
+  --brand-tint-border: #bfe4d7;
+  --brand-tint-text: #0e5f50;
+  /* Matches the real ShuzaGram app icon's violet-to-mint "S" sweep. */
+  --brand-gradient: linear-gradient(135deg, #7c6ad6 0%, #2fb89c 100%);
 
   /* Semantic */
-  --good: #1f8a57;
-  --good-tint: #eaf6ef;
-  --good-border: #c1e1cf;
-  --warn: #a86a12;
-  --warn-tint: #fcf4e4;
-  --warn-border: #e7d09e;
-  --danger: #c0392b;
-  --danger-tint: #fcefec;
-  --danger-border: #eecac3;
-  --danger-text: #8f2f27;
+  --good: #198a57;
+  --good-tint: #e8f7ee;
+  --good-border: #bce4cd;
+  --warn: #a2690f;
+  --warn-tint: #fbf2e1;
+  --warn-border: #e6cc95;
+  --danger: #c23a2b;
+  --danger-tint: #fceeeb;
+  --danger-border: #edc5bd;
+  --danger-text: #8c2d21;
 
   /* Accent (collectibles / craft) */
-  --purple: #6a4fa3;
-  --purple-tint: #f4effb;
-  --purple-border: #dcd0f0;
-  --purple-text: #5a4590;
+  --purple: #6f4fb0;
+  --purple-tint: #f2edfb;
+  --purple-border: #d8c9f2;
+  --purple-text: #563d8f;
 
   /* Inputs & controls */
   --input-bg: #ffffff;
   --btn-bg: #ffffff;
   --btn-text: #29323d;
-  --btn-hover: #f4f7fa;
-  --switch-track: #c8d0d6;
+  --btn-hover: #f3f6fa;
+  --switch-track: #c6cfd8;
 
   /* Code / JSON blocks */
-  --code-bg: #1b2733;
+  --code-bg: #182430;
   --code-text: #d6e3ef;
-  --code-border: #2b3a49;
+  --code-border: #293847;
 
-  /* Sidebar */
-  --sidebar: #1c2530;
-  --sidebar-soft: #26313d;
-  --sidebar-line: #313c4a;
-  --sidebar-row: #232d38;
-  --sidebar-text: #dbe3ec;
-  --sidebar-muted: #8b98a8;
-  --sidebar-faint: #7c8a9a;
+  /* Sidebar -- near-black with a faint cool tint instead of plain slate, a
+     visible left accent bar on the active item (added below) instead of
+     relying on background shift alone. */
+  --sidebar: #141c26;
+  --sidebar-soft: #202b38;
+  --sidebar-line: #2b3645;
+  --sidebar-row: #1b2430;
+  --sidebar-text: #d7e0ea;
+  --sidebar-muted: #8995a6;
+  --sidebar-faint: #798699;
   --sidebar-heading: #ffffff;
+  --sidebar-active-bg: #1a3a34;
 
-  /* Effects */
-  --focus: rgba(31, 125, 111, 0.16);
-  --shadow: 0 12px 34px rgba(24, 39, 56, 0.1);
-  --shadow-sm: 0 2px 10px rgba(24, 39, 56, 0.05);
-  --shadow-brand: 0 8px 22px rgba(31, 125, 111, 0.22);
+  /* Effects -- softer, larger-blur shadows for a more "floating card" feel. */
+  --focus: rgba(20, 131, 111, 0.18);
+  --shadow: 0 18px 44px rgba(16, 26, 38, 0.12);
+  --shadow-sm: 0 3px 12px rgba(16, 26, 38, 0.06);
+  --shadow-float: 0 10px 28px rgba(16, 26, 38, 0.1);
+  --shadow-brand: 0 10px 26px rgba(20, 131, 111, 0.24);
 
-  /* Radii */
+  /* Radii -- a touch softer/rounder across the board. */
   --radius-xs: 8px;
-  --radius-sm: 9px;
-  --radius: 11px;
-  --radius-lg: 14px;
+  --radius-sm: 10px;
+  --radius: 13px;
+  --radius-lg: 17px;
+  --radius-xl: 22px;
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --bg: #0f141a;
-  --bg-accent: #131a22;
-  --panel: #171f28;
-  --panel-subtle: #1c2530;
-  --panel-strong: #212c38;
-  --surface-soft: #1a232d;
-  --overlay: rgba(5, 8, 12, 0.62);
-  --topbar-bg: rgba(21, 28, 36, 0.86);
+  --bg: #0d1218;
+  --bg-accent: #11171f;
+  --panel: #161e27;
+  --panel-subtle: #1b2430;
+  --panel-strong: #202b38;
+  --surface-soft: #182621;
+  --overlay: rgba(4, 7, 11, 0.66);
+  --topbar-bg: rgba(18, 24, 32, 0.82);
 
-  --line: #29333f;
-  --line-strong: #38434f;
+  --line: #263140;
+  --line-strong: #364252;
 
-  --heading: #eef3f8;
-  --text: #d5dde6;
-  --text-soft: #c2ccd6;
-  --muted: #98a4b1;
-  --muted-2: #6d7885;
+  --heading: #f1f5fa;
+  --text: #d7dfe8;
+  --text-soft: #c4cdd8;
+  --muted: #94a0ae;
+  --muted-2: #697482;
 
-  --brand: #37a596;
-  --brand-strong: #45b6a6;
+  --brand: #3bb09e;
+  --brand-strong: #4bc2b0;
   --brand-2: #6fa8e6;
-  --brand-tint: #14322d;
-  --brand-tint-border: #245349;
-  --brand-tint-text: #7fd3c4;
+  --brand-tint: #122e29;
+  --brand-tint-border: #224d44;
+  --brand-tint-text: #83d9c9;
+  /* Matches the real ShuzaGram app icon's violet-to-mint "S" sweep,
+     brightened slightly for contrast against dark panels. */
+  --brand-gradient: linear-gradient(135deg, #9b8af0 0%, #3bd9b8 100%);
 
-  --good: #47c281;
-  --good-tint: #12301f;
-  --good-border: #245639;
-  --warn: #e0aa4d;
-  --warn-tint: #322810;
-  --warn-border: #574413;
-  --danger: #e6695c;
-  --danger-tint: #35201d;
-  --danger-border: #5c332d;
-  --danger-text: #f0a49b;
+  --good: #4bc985;
+  --good-tint: #112c1d;
+  --good-border: #225238;
+  --warn: #e3af52;
+  --warn-tint: #2e2510;
+  --warn-border: #52400f;
+  --danger: #e87566;
+  --danger-tint: #311d1a;
+  --danger-border: #58302a;
+  --danger-text: #f2ab9e;
 
-  --purple: #ac90e2;
-  --purple-tint: #221b31;
-  --purple-border: #3d3357;
-  --purple-text: #c9b6ef;
+  --purple: #b19aea;
+  --purple-tint: #1f1930;
+  --purple-border: #3a3055;
+  --purple-text: #cdbdf3;
 
-  --input-bg: #131a22;
-  --btn-bg: #1e2731;
-  --btn-text: #dbe2ea;
-  --btn-hover: #26313d;
-  --switch-track: #3a454f;
+  --input-bg: #11171f;
+  --btn-bg: #1c2631;
+  --btn-text: #dde4ec;
+  --btn-hover: #24303c;
+  --switch-track: #394552;
 
-  --code-bg: #0c1218;
+  --code-bg: #0a0f14;
   --code-text: #cdd9e5;
-  --code-border: #232f3b;
+  --code-border: #212d39;
 
-  --sidebar: #10151b;
-  --sidebar-soft: #1c242f;
-  --sidebar-line: #262f3a;
-  --sidebar-row: #161d25;
-  --sidebar-text: #cbd4de;
-  --sidebar-muted: #7c8794;
-  --sidebar-faint: #6f7b88;
-  --sidebar-heading: #f0f4f8;
+  --sidebar: #0b0f14;
+  --sidebar-soft: #19212b;
+  --sidebar-line: #232c37;
+  --sidebar-row: #141b23;
+  --sidebar-text: #ccd5df;
+  --sidebar-muted: #7d899a;
+  --sidebar-faint: #6c7886;
+  --sidebar-heading: #f3f6fa;
+  --sidebar-active-bg: #163732;
 
-  --focus: rgba(55, 165, 150, 0.24);
-  --shadow: 0 16px 40px rgba(0, 0, 0, 0.46);
-  --shadow-sm: 0 2px 12px rgba(0, 0, 0, 0.38);
-  --shadow-brand: 0 8px 22px rgba(55, 165, 150, 0.26);
+  --focus: rgba(59, 176, 158, 0.26);
+  --shadow: 0 20px 48px rgba(0, 0, 0, 0.5);
+  --shadow-sm: 0 3px 14px rgba(0, 0, 0, 0.4);
+  --shadow-float: 0 12px 30px rgba(0, 0, 0, 0.42);
+  --shadow-brand: 0 10px 26px rgba(59, 176, 158, 0.28);
 }
 
 * {
@@ -185,16 +200,26 @@ a {
 }
 
 .shell {
-  display: grid;
   min-height: 100vh;
-  grid-template-columns: 232px minmax(0, 1fr);
+  /* dvh tracks the browser's actual visible viewport, shrinking and growing
+     as a mobile browser's own address/toolbar chrome shows and hides --
+     plain vh is fixed to the viewport's largest possible size, which is
+     what cut off the bottom of fixed-height panels on phones. */
+  min-height: 100dvh;
 }
 
+/* The sidebar is an off-canvas drawer (see the menu-toggle button in the
+   topbar), not a permanent column: .workspace always takes the full width,
+   and .sidebar overlays on top of it, closed by default. */
 .sidebar {
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  z-index: 40;
   display: flex;
+  width: 264px;
   height: 100vh;
+  height: 100dvh;
   flex-direction: column;
   gap: 16px;
   overflow-y: auto;
@@ -202,6 +227,56 @@ a {
   color: var(--sidebar-text);
   background: var(--sidebar);
   border-right: 1px solid var(--sidebar-line);
+  box-shadow: var(--shadow);
+  transform: translateX(-100%);
+  transition: transform 200ms ease;
+}
+
+.sidebar.open {
+  transform: translateX(0);
+}
+
+.sidebar-backdrop {
+  position: fixed;
+  z-index: 35;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--overlay);
+  animation: sidebar-backdrop-fade 160ms ease;
+}
+
+@keyframes sidebar-backdrop-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.menu-toggle {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--text-soft);
+  background: var(--panel-subtle);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease;
+}
+
+.menu-toggle:hover {
+  color: var(--brand);
+  background: var(--brand-tint);
+  border-color: var(--brand-tint-border);
+}
+
+.topbar-start {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 14px;
 }
 
 .brand {
@@ -221,15 +296,13 @@ a {
 }
 
 .brand-mark {
-  display: grid;
+  display: block;
   width: 34px;
   height: 34px;
-  place-items: center;
-  color: #ffffff;
-  background: var(--brand);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: var(--radius-sm);
-  font-weight: 800;
+  object-fit: cover;
+  background: var(--brand-gradient);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 50%;
 }
 
 .brand strong {
@@ -306,13 +379,58 @@ a {
   padding: 2px 0 2px 18px;
 }
 
+.nav-group {
+  display: grid;
+  gap: 2px;
+  margin-top: 6px;
+}
+
+.nav-group-toggle {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 14px;
+  width: 100%;
+  min-height: 30px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 10px;
+  color: var(--sidebar-faint);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: color 140ms ease;
+}
+
+.nav-group-toggle:hover {
+  color: var(--sidebar-muted);
+}
+
+.nav-group .nav-section-chevron {
+  transform: rotate(180deg);
+}
+
+.nav-group:not(.open) .nav-section-chevron {
+  transform: rotate(0deg);
+}
+
+.nav-group-children {
+  display: grid;
+  gap: 3px;
+  padding-top: 2px;
+}
+
 .nav-item {
+  position: relative;
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);
   min-height: 38px;
   align-items: center;
   gap: 9px;
-  padding: 0 10px;
+  padding: 0 10px 0 13px;
   color: var(--sidebar-text);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
@@ -327,11 +445,28 @@ a {
   border-radius: 999px;
 }
 
-.nav-item:hover,
-.nav-item.active {
+.nav-item:hover {
   color: var(--sidebar-heading);
   background: var(--sidebar-soft);
   border-color: var(--sidebar-line);
+}
+
+.nav-item.active {
+  color: var(--sidebar-heading);
+  background: var(--sidebar-active-bg);
+  border-color: transparent;
+  font-weight: 700;
+}
+
+.nav-item.active::before {
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  left: 0;
+  width: 3px;
+  background: var(--brand-gradient);
+  border-radius: 999px;
+  content: "";
 }
 
 .nav-item.active .nav-dot {

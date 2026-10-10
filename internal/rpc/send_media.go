@@ -66,6 +66,9 @@ func (r *Router) sendOutgoing(ctx context.Context, userID int64, peer domain.Pee
 		if r.deps.Channels == nil {
 			return nil, false, peerIDInvalidErr()
 		}
+		if err := r.ensureSpamRestrictionAllowedForGroupSend(ctx, userID); err != nil {
+			return nil, false, err
+		}
 		replyTo := p.replyTo
 		if !p.replyToReady {
 			resolved, err := r.messageReplyFromInput(ctx, userID, peer, p.replyToInput)
@@ -313,6 +316,9 @@ func (r *Router) onMessagesSendMedia(ctx context.Context, req *tg.MessagesSendMe
 		return nil, suggestedPostPeerInvalidErr()
 	}
 	if monoforum {
+		if err := r.ensureSpamRestrictionAllowedForGroupSend(ctx, userID); err != nil {
+			return nil, err
+		}
 		if req.AllowPaidStars < 0 {
 			return nil, starsAmountInvalidErr()
 		}

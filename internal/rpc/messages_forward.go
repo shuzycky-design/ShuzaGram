@@ -209,6 +209,9 @@ func (r *Router) onMessagesForwardMessages(ctx context.Context, req *tg.Messages
 		if r.deps.Channels == nil {
 			return nil, peerIDInvalidErr()
 		}
+		if err := r.ensureSpamRestrictionAllowedForGroupSend(ctx, userID); err != nil {
+			return nil, err
+		}
 		recipients := make([]int64, 0)
 		results := make([]domain.SendChannelMessageResult, 0, len(sources))
 		extraUserIDs := make([]int64, 0, len(sources))
@@ -362,6 +365,9 @@ func (r *Router) forwardMessagesToMonoforum(
 	topMsgID int,
 	topMsgIDSet bool,
 ) (tg.UpdatesClass, error) {
+	if err := r.ensureSpamRestrictionAllowedForGroupSend(ctx, userID); err != nil {
+		return nil, err
+	}
 	if req.ScheduleDate != 0 && !scheduleDateIsImmediate(req.ScheduleDate, int(r.clock.Now().Unix())) {
 		return nil, scheduleDateInvalidErr()
 	}

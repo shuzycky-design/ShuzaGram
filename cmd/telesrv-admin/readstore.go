@@ -331,13 +331,15 @@ type AccountDetail struct {
 	Fake           bool
 	Support        bool
 	Bot            bool
-	LoginEmail     string
-	StarsBalance   int64
-	StarsGranted   bool
-	Restriction    RestrictionRow
-	HasRestriction bool
-	Authorizations []AuthorizationRow
-	AuditLogs      []AuditLogRow
+	LoginEmail         string
+	StarsBalance       int64
+	StarsGranted       bool
+	Restriction        RestrictionRow
+	HasRestriction     bool
+	SpamRestriction    SpamRestrictionRow
+	HasSpamRestriction bool
+	Authorizations     []AuthorizationRow
+	AuditLogs          []AuditLogRow
 }
 
 type RestrictionRow struct {
@@ -349,6 +351,24 @@ type RestrictionRow struct {
 	Actor     string
 	CommandID string
 	UpdatedAt time.Time
+}
+
+type SpamRestrictionRow struct {
+	Tier                  int
+	DistinctReporterCount int
+	LastReportAt          time.Time
+	ManualOverride        bool
+	Actor                 string
+	Reason                string
+	UpdatedAt             time.Time
+}
+
+type SpamRestrictionSettingsRow struct {
+	Tier1Threshold int
+	Tier2Threshold int
+	DecayHours     int
+	UpdatedAt      time.Time
+	UpdatedBy      string
 }
 
 type AuthorizationRow struct {
@@ -966,6 +986,10 @@ WHERE u.id = $1`, userID).Scan(
 	if err != nil {
 		return out, err
 	}
+	out.SpamRestriction, out.HasSpamRestriction, err = s.spamRestriction(ctx, userID)
+	if err != nil {
+		return out, err
+	}
 	out.Authorizations, err = s.authorizations(ctx, userID)
 	if err != nil {
 		return out, err
@@ -993,6 +1017,36 @@ WHERE user_id = $1`, userID).Scan(
 		return RestrictionRow{}, false, fmt.Errorf("get restriction: %w", err)
 	}
 	return r, true, nil
+}
+
+func (s *readStore) spamRestriction(ctx context.Context, userID int64) (SpamRestrictionRow, bool, error) {
+	var r SpamRestrictionRow
+	err := s.pool.QueryRow(ctx, `
+SELECT tier, distinct_reporter_count, last_report_at, manual_override, actor, reason, updated_at
+FROM spam_restrictions
+WHERE user_id = $1`, userID).Scan(
+		&r.Tier, &r.DistinctReporterCount, &r.LastReportAt, &r.ManualOverride, &r.Actor, &r.Reason, &r.UpdatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return SpamRestrictionRow{}, false, nil
+		}
+		return SpamRestrictionRow{}, false, fmt.Errorf("get spam restriction: %w", err)
+	}
+	return r, true, nil
+}
+
+func (s *readStore) SpamRestrictionSettings(ctx context.Context) (SpamRestrictionSettingsRow, error) {
+	var r SpamRestrictionSettingsRow
+	err := s.pool.QueryRow(ctx, `
+SELECT tier1_threshold, tier2_threshold, decay_hours, updated_at, updated_by
+FROM spam_restriction_settings WHERE id = 1`).Scan(
+		&r.Tier1Threshold, &r.Tier2Threshold, &r.DecayHours, &r.UpdatedAt, &r.UpdatedBy,
+	)
+	if err != nil {
+		return SpamRestrictionSettingsRow{}, fmt.Errorf("get spam restriction settings: %w", err)
+	}
+	return r, nil
 }
 
 func (s *readStore) authorizations(ctx context.Context, userID int64) ([]AuthorizationRow, error) {

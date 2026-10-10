@@ -105,6 +105,13 @@ type TextDraftPusher interface {
 	PushBotTextDraft(ctx context.Context, botUserID, userID, randomID int64, text string)
 }
 
+// spamRestrictionLookup is the narrow surface the built-in @spambot needs --
+// satisfied as-is by *postgres.SpamRestrictionStore.
+type spamRestrictionLookup interface {
+	SpamRestriction(ctx context.Context, userID int64) (domain.SpamRestriction, bool, error)
+	SpamRestrictionSettings(ctx context.Context) (domain.SpamRestrictionSettings, error)
+}
+
 // replyLockStripes 是回复串行化条带数：同一用户的 BotFather 回复落同一条带、
 // 串行执行（状态机 RMW 原子 + 回复保序），不同用户并发；固定大小不随用户数增长。
 const replyLockStripes = 256
@@ -127,6 +134,7 @@ type Service struct {
 	verification          verificationApplications
 	customVerification    customVerifications
 	verifierTargets       verifierBotTargets
+	spamRestrictions      spamRestrictionLookup
 	telegramLogin         *telegramloginapp.Service
 	hooks                 RouterHooks
 	textDrafts            TextDraftPusher
@@ -278,6 +286,17 @@ func WithVerifierTargets(t verifierBotTargets) Option {
 	return func(s *Service) {
 		if t != nil {
 			s.verifierTargets = t
+		}
+	}
+}
+
+// WithSpamRestrictions injects the per-user graduated anti-spam restriction
+// lookup used by the built-in @spambot. Without it the bot still answers,
+// but every status check reports the feature as unavailable.
+func WithSpamRestrictions(l spamRestrictionLookup) Option {
+	return func(s *Service) {
+		if l != nil {
+			s.spamRestrictions = l
 		}
 	}
 }

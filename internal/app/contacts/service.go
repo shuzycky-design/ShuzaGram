@@ -539,6 +539,21 @@ func (s *Service) GetPeerSettings(ctx context.Context, userID int64, peer domain
 	}, nil
 }
 
+// ContactRelationship reports whether peerUserID is in userID's contact
+// list and, if so, whether it is mutual. Used by the spam-restriction RPC
+// gate (internal/rpc/spam_restriction_gate.go) to decide tier1/tier2
+// exemptions.
+func (s *Service) ContactRelationship(ctx context.Context, userID, peerUserID int64) (bool, bool, error) {
+	if s == nil || s.contacts == nil || userID == 0 || peerUserID == 0 || userID == peerUserID {
+		return false, false, nil
+	}
+	contact, found, err := s.contacts.Get(ctx, userID, peerUserID)
+	if err != nil {
+		return false, false, err
+	}
+	return found, found && contact.Mutual, nil
+}
+
 func (s *Service) peerCanSeeCurrentUserPhone(ctx context.Context, ownerUserID, viewerUserID int64) (bool, error) {
 	allowed, err := s.privacy.CanSee(ctx, ownerUserID, viewerUserID, domain.PrivacyKeyPhoneNumber)
 	if err != nil || allowed {

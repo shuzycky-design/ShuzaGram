@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -259,6 +260,7 @@ SELECT pg_advisory_xact_lock(
 		return fmt.Errorf("lock moderation case target: %w", err)
 	}
 	var caseID int64
+	var distinctReporterCount int
 	err := tx.QueryRow(ctx, `
 SELECT id
 FROM moderation_cases
@@ -288,6 +290,11 @@ INSERT INTO moderation_case_reports (case_id, report_id, attached_at)
 VALUES ($1,$2,$3)`, caseID, reportID, report.CreatedAt); err != nil {
 			return fmt.Errorf("attach report to new moderation case: %w", err)
 		}
+		if report.Target.Type == domain.PeerTypeUser {
+			if err := recalculateSpamRestrictionTierTx(ctx, tx, report.Target.ID, caseID, 1, report.CreatedAt); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 	if err != nil {
@@ -298,10 +305,19 @@ INSERT INTO moderation_case_reports (case_id, report_id, attached_at)
 VALUES ($1,$2,$3)`, caseID, reportID, report.CreatedAt); err != nil {
 		return fmt.Errorf("attach report to moderation case: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `
+	// Deliberately does NOT bump c.version: that column is the optimistic-
+	// concurrency token ClaimModerationCase/DecideModerationCase/
+	// ReviewModerationAppeal check against the moderator's last-seen value.
+	// Bumping it here too meant any new report landing on a still-open case
+	// -- which happens precisely to the busiest, most-reported cases, often
+	// mid-review -- silently invalidated the moderator's in-flight
+	// claim/decide, surfacing as an inexplicable "conflict" error. Report
+	// ingestion only needs to refresh the aggregate counters and
+	// last_report_at/updated_at below, which claim/decide never compare
+	// against.
+	if err := tx.QueryRow(ctx, `
 UPDATE moderation_cases c
 SET severity = greatest(c.severity, $2),
-    version = c.version + 1,
     report_count = (
       SELECT count(*)::integer
       FROM moderation_case_reports cr
@@ -316,11 +332,80 @@ SET severity = greatest(c.severity, $2),
     first_report_at = least(c.first_report_at, $3),
     last_report_at = greatest(c.last_report_at, $3),
     updated_at = greatest(c.updated_at, $3)
-WHERE c.id = $1`,
+WHERE c.id = $1
+RETURNING distinct_reporter_count`,
 		caseID, int16(domain.ModerationSeverityForReason(report.Reason)),
 		report.CreatedAt,
-	); err != nil {
+	).Scan(&distinctReporterCount); err != nil {
 		return fmt.Errorf("update moderation case aggregates: %w", err)
+	}
+	if report.Target.Type == domain.PeerTypeUser {
+		if err := recalculateSpamRestrictionTierTx(ctx, tx, report.Target.ID, caseID, distinctReporterCount, report.CreatedAt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// recalculateSpamRestrictionTierTx escalates (never auto-downgrades) the
+// target user's spam_restrictions row given the fresh distinct-reporter
+// count on their active moderation case, against the admin-configured
+// thresholds. Downgrading is exclusively the decay sweep's job
+// (SpamRestrictionStore.SweepDueSpamRestrictionDecay) -- this keeps "a new
+// report arrived" (which always refreshes the decay clock) separate from
+// "the tier should increase" (which only happens here). Rows with
+// manual_override set are left untouched, matching the account-freeze
+// pattern of admin-pinned state.
+func recalculateSpamRestrictionTierTx(ctx context.Context, tx pgx.Tx, userID, caseID int64, distinctReporterCount int, now time.Time) error {
+	var tier1, tier2 int
+	if err := tx.QueryRow(ctx, `
+SELECT tier1_threshold, tier2_threshold
+FROM spam_restriction_settings WHERE id = 1`).Scan(&tier1, &tier2); err != nil {
+		return fmt.Errorf("load spam restriction settings: %w", err)
+	}
+	tier := 0
+	switch {
+	case distinctReporterCount >= tier2:
+		tier = 2
+	case distinctReporterCount >= tier1:
+		tier = 1
+	}
+	if tier == 0 {
+		if _, err := tx.Exec(ctx, `
+UPDATE spam_restrictions
+SET case_id = $2, distinct_reporter_count = $3, last_report_at = $4,
+    version = version + 1, updated_at = now()
+WHERE user_id = $1 AND NOT manual_override`, userID, caseID, distinctReporterCount, now); err != nil {
+			return fmt.Errorf("refresh spam restriction decay clock: %w", err)
+		}
+		return nil
+	}
+	if _, err := tx.Exec(ctx, `
+INSERT INTO spam_restrictions (user_id, tier, case_id, distinct_reporter_count, last_report_at, version, updated_at)
+VALUES ($1,$2,$3,$4,$5,1,now())
+ON CONFLICT (user_id) DO UPDATE SET
+  tier = GREATEST(spam_restrictions.tier, EXCLUDED.tier),
+  case_id = EXCLUDED.case_id,
+  distinct_reporter_count = EXCLUDED.distinct_reporter_count,
+  last_report_at = EXCLUDED.last_report_at,
+  version = spam_restrictions.version + 1,
+  updated_at = now()
+WHERE NOT spam_restrictions.manual_override`, userID, tier, caseID, distinctReporterCount, now); err != nil {
+		return fmt.Errorf("escalate spam restriction tier: %w", err)
+	}
+	return nil
+}
+
+// clearSpamRestrictionForDismissedCaseTx lifts a non-manual-override
+// restriction immediately when the moderation case that triggered it is
+// dismissed (reports ruled unfounded) or an appeal against it is granted --
+// otherwise the restriction would linger confusingly until the decay sweep.
+func clearSpamRestrictionForDismissedCaseTx(ctx context.Context, tx pgx.Tx, userID, caseID int64) error {
+	if _, err := tx.Exec(ctx, `
+UPDATE spam_restrictions
+SET tier = 0, version = version + 1, updated_at = now()
+WHERE user_id = $1 AND case_id = $2 AND NOT manual_override`, userID, caseID); err != nil {
+		return fmt.Errorf("clear spam restriction for dismissed case: %w", err)
 	}
 	return nil
 }

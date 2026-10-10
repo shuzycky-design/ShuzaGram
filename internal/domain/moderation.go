@@ -168,7 +168,13 @@ type ModerationMediaHold struct {
 
 // ModerationReport is immutable after acceptance. ID is assigned by the store;
 // Fingerprint is a deterministic SHA-256 of the immutable client intent and
-// evidence identity, excluding CreatedAt.
+// evidence identity, plus CreatedAt truncated to a UTC day bucket (see
+// moderationReportFingerprint) -- not the exact timestamp. The day bucket
+// absorbs same-day client retries (double-taps, network-blip resubmits) as a
+// true duplicate, while letting a genuinely later report of still-unchanged
+// content (e.g. reporting a spam profile again a week later) land as a new
+// row instead of being silently swallowed forever by the
+// (reporter_user_id, fingerprint) unique constraint.
 type ModerationReport struct {
 	ID              int64
 	ReporterUserID  int64
@@ -444,6 +450,11 @@ type moderationFingerprintPayload struct {
 	CommentHash     [sha256.Size]byte           `json:"comment_hash"`
 	TaxonomyVersion int                         `json:"taxonomy_version"`
 	Items           []moderationFingerprintItem `json:"items"`
+	// DayBucket is CreatedAt truncated to a UTC calendar day. Folding it in
+	// absorbs same-day retries as a true duplicate while letting an
+	// identical report submitted on a later day get its own fingerprint --
+	// see the ModerationReport.Fingerprint doc comment above.
+	DayBucket string `json:"day_bucket"`
 }
 
 func moderationReportFingerprint(report ModerationReport) ([sha256.Size]byte, error) {
@@ -458,11 +469,12 @@ func moderationReportFingerprint(report ModerationReport) ([sha256.Size]byte, er
 		})
 	}
 	raw, err := json.Marshal(moderationFingerprintPayload{
-		Version: 1, ReporterUserID: report.ReporterUserID, Source: report.Source,
+		Version: 2, ReporterUserID: report.ReporterUserID, Source: report.Source,
 		TargetType: report.Target.Type, TargetID: report.Target.ID,
 		Reason: report.Reason, Option: report.Option,
 		CommentHash: report.CommentHash, TaxonomyVersion: report.TaxonomyVersion,
-		Items: items,
+		Items:     items,
+		DayBucket: report.CreatedAt.UTC().Format("2006-01-02"),
 	})
 	if err != nil {
 		return [sha256.Size]byte{}, ErrModerationReportInvalid

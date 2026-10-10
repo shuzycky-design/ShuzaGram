@@ -417,7 +417,15 @@
   display: grid; grid-template-columns: 108px minmax(0, 1fr); gap: 14px; align-items: center;
   padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-soft);
 }
-.official-gift-selected .gift-animation-shell { width: 96px; height: 96px; }
+/* Three things, all needed: the base .gift-animation-shell rule sets
+   min-height: 210px, which otherwise wins over this 96px height
+   (min-height always wins when larger); the base .gift-animation INNER div
+   is independently fixed at 200x200 and was never resized for this
+   96x96 shell; and without overflow:hidden on the shell, an oversized
+   inner canvas simply spills out over the modal's own footer buttons
+   below it rather than being clipped. */
+.official-gift-selected .gift-animation-shell { width: 96px; height: 96px; min-height: 96px; overflow: hidden; }
+.official-gift-selected .gift-animation { width: 96px; height: 96px; }
 .official-gift-selected > div:last-child { display: grid; gap: 5px; min-width: 0; }
 .official-gift-selected small { color: var(--muted); }
 .gift-import-note { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); line-height: 1.45; }
@@ -727,7 +735,8 @@
   .official-gift-tools { align-items: stretch; flex-direction: column; }
   .official-gift-list { grid-template-columns: 1fr; max-height: 340px; }
   .official-gift-selected { grid-template-columns: 82px minmax(0, 1fr); }
-  .official-gift-selected .gift-animation-shell { width: 72px; height: 72px; }
+  .official-gift-selected .gift-animation-shell { width: 72px; height: 72px; min-height: 72px; overflow: hidden; }
+  .official-gift-selected .gift-animation { width: 72px; height: 72px; }
   .collectible-modal-body { padding: 10px; }
   .collectible-definition-head,
   .collectible-section-head { align-items: flex-start; flex-direction: column; }

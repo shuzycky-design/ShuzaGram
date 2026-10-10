@@ -1,9 +1,10 @@
-import { CheckCircle2, FileJson2, Gem, Loader2, Pause, Play, Plus, RefreshCw, Search, Settings2, ShieldCheck, Upload, X } from "lucide-react";
+import { CheckCircle2, FileJson2, Gem, Loader2, Plus, RefreshCw, Search, Settings2, ShieldCheck, Upload, X } from "lucide-react";
 import lottie from "lottie-web/build/player/lottie_light_canvas";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api, errorMessage } from "../api";
 import { ActionButton } from "../components/ActionButton";
+import { StaticLottie } from "../components/StaticLottie";
 import { Alert, Badge, EmptyRow, Metric, PageFrame, QueryPanel } from "../components/ui";
 import { useI18n } from "../i18n";
 import { formatDate, toUnixSeconds } from "../lib/format";
@@ -28,49 +29,6 @@ function formatBytes(value: number | string) {
 	if (bytes < 1024) return `${bytes} B`;
 	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
 	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-export function LottiePreview({ giftID, revision, compact = false }: { giftID: string; revision: number; compact?: boolean }) {
-  const host = useRef<HTMLDivElement>(null);
-  const animation = useRef<ReturnType<typeof lottie.loadAnimation> | null>(null);
-  const [playing, setPlaying] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-    api.giftAnimation(giftID).then((data) => {
-      if (cancelled || !host.current) return;
-      animation.current?.destroy();
-      animation.current = lottie.loadAnimation({
-        container: host.current,
-        renderer: "canvas",
-        loop: true,
-        autoplay: true,
-        animationData: structuredClone(data)
-      });
-    }).catch((err) => setError(errorMessage(err)));
-    return () => {
-      cancelled = true;
-      animation.current?.destroy();
-      animation.current = null;
-    };
-  }, [giftID, revision]);
-
-  function toggle() {
-    if (!animation.current) return;
-    if (playing) animation.current.pause();
-    else animation.current.play();
-    setPlaying(!playing);
-  }
-
-  return (
-    <div className={`gift-animation-shell ${compact ? "compact" : ""}`}>
-      <div className="gift-animation" ref={host}>{error && <span>{error}</span>}</div>
-      <button className="gift-play" type="button" onClick={toggle} aria-label={playing ? "Pause" : "Play"}>
-        {playing ? <Pause size={14} /> : <Play size={14} />}
-      </button>
-    </div>
-  );
 }
 
 function OfficialLottiePreview({ sourceGiftID }: { sourceGiftID: string }) {
@@ -390,7 +348,16 @@ export function GiftsPage() {
           <tbody>
             {visibleGifts.map((gift) => (
               <tr className={gift.Enabled ? "" : "gift-row-disabled"} key={gift.GiftID}>
-                <td><LottiePreview giftID={gift.GiftID} revision={gift.Revision} compact /></td>
+                <td>
+                  <div className="gift-animation-shell compact">
+                    <StaticLottie
+                      lazy
+                      cacheKey={`${gift.GiftID}:${gift.Revision}`}
+                      loader={() => api.giftAnimation(gift.GiftID)}
+                      className="gift-animation"
+                    />
+                  </div>
+                </td>
                 <td className="mono">{gift.GiftID} / {gift.Revision}</td>
                 <td><strong className="gift-table-title">{gift.Title || `Gift #${gift.GiftID}`}</strong><span className="gift-sort-order">{t("gifts.sortOrder")}: {gift.SortOrder}</span></td>
                 <td><strong className="gift-table-price">⭐ {gift.Stars}</strong><span className="gift-convert-price">→ {gift.ConvertStars}</span>{gift.Limited && <span className="gift-limited-badge">{t("gifts.limited.badge", { remains: gift.AvailabilityRemains, total: gift.AvailabilityTotal })}</span>}</td>

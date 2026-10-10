@@ -1,11 +1,12 @@
 import { ChevronRight, RefreshCw, ShieldAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, errorMessage } from "../api";
+import { ActionButton } from "../components/ActionButton";
 import { Alert, Badge, EmptyRow, Metric, PageFrame, QueryPanel } from "../components/ui";
 import { useI18n, type TFunction } from "../i18n";
 import { formatDate } from "../lib/format";
 import type { Navigate } from "../routing";
-import type { ModerationCaseRow } from "../types";
+import type { ModerationCaseRow, SpamRestrictionSettings } from "../types";
 
 const defaultStatuses = "open,in_review,action_pending,action_failed,appeal_review";
 const allStatuses = "open,in_review,action_pending,action_failed,resolved,dismissed,appeal_review";
@@ -28,6 +29,10 @@ export function ModerationCasesPage({ navigate }: { navigate: Navigate }) {
   const [rows, setRows] = useState<ModerationCaseRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [spamSettings, setSpamSettings] = useState<SpamRestrictionSettings | null>(null);
+  const [tier1Threshold, setTier1Threshold] = useState("3");
+  const [tier2Threshold, setTier2Threshold] = useState("8");
+  const [decayHours, setDecayHours] = useState("168");
 
   async function load() {
     setBusy(true);
@@ -43,8 +48,21 @@ export function ModerationCasesPage({ navigate }: { navigate: Navigate }) {
     }
   }
 
+  async function loadSpamSettings() {
+    try {
+      const settings = await api.spamRestrictionSettings();
+      setSpamSettings(settings);
+      setTier1Threshold(String(settings.Tier1Threshold));
+      setTier2Threshold(String(settings.Tier2Threshold));
+      setDecayHours(String(settings.DecayHours));
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
   useEffect(() => {
     void load();
+    void loadSpamSettings();
   }, []);
 
   const pendingActions = rows.filter((row) => row.Status === "action_pending" || row.Status === "action_failed").length;
@@ -65,6 +83,33 @@ export function ModerationCasesPage({ navigate }: { navigate: Navigate }) {
         <Metric label={t("moderation.currentQueue")} value={String(rows.length)} />
         <Metric label={t("moderation.criticalCases")} value={String(critical)} tone={critical ? "danger" : "neutral"} />
         <Metric label={t("moderation.pendingOrFailed")} value={String(pendingActions)} tone={pendingActions ? "warn" : "good"} />
+      </div>
+      <div className="query-panel">
+        <section className="quick-settings-section">
+          <div className="quick-settings-head">
+            <strong>{t("moderation.spamSettingsTitle")}</strong>
+            <span>{t("moderation.spamSettingsHint")}</span>
+          </div>
+          <div className="quick-settings-row">
+            <label><span>{t("moderation.spamTier1Threshold")}</span><input type="number" min="1" value={tier1Threshold} onChange={(event) => setTier1Threshold(event.target.value)} /></label>
+            <label><span>{t("moderation.spamTier2Threshold")}</span><input type="number" min="1" value={tier2Threshold} onChange={(event) => setTier2Threshold(event.target.value)} /></label>
+            <label><span>{t("moderation.spamDecayHours")}</span><input type="number" min="1" value={decayHours} onChange={(event) => setDecayHours(event.target.value)} /></label>
+            <ActionButton
+              compact
+              tone="neutral"
+              label={t("moderation.saveSpamSettings")}
+              path="/api/actions/set-spam-restriction-settings"
+              disabled={Number(tier1Threshold) <= 0 || Number(tier2Threshold) <= Number(tier1Threshold) || Number(decayHours) <= 0}
+              payload={() => ({
+                tier1_threshold: Number(tier1Threshold),
+                tier2_threshold: Number(tier2Threshold),
+                decay_hours: Number(decayHours)
+              })}
+              onDone={loadSpamSettings}
+            />
+          </div>
+          {spamSettings && <p className="muted">{t("common.updatedAt")}: {formatDate(spamSettings.UpdatedAt) || "-"}</p>}
+        </section>
       </div>
       <QueryPanel>
         <form className="toolbar" onSubmit={(event) => { event.preventDefault(); void load(); }}>

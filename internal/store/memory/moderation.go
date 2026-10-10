@@ -147,7 +147,11 @@ func (s *ModerationReportStore) attachReportToCaseLocked(report domain.Moderatio
 	if report.CreatedAt.After(item.UpdatedAt) {
 		item.UpdatedAt = report.CreatedAt
 	}
-	item.Version++
+	// Deliberately does not bump item.Version -- see the matching comment on
+	// the postgres store's attachModerationReportToCase: Version is the
+	// claim/decide optimistic-concurrency token, and bumping it on every
+	// incoming report spuriously conflicts with an in-flight moderator
+	// action on the same (often still-open, still-reported) case.
 	s.cases[caseID] = item
 }
 

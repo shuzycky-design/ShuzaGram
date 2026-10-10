@@ -75,6 +75,15 @@ export function ModerationCaseDetailPage({ id, navigate }: { id: number; navigat
     setError("");
     try {
       await api.claimModerationCase(id, detail.Case.Version);
+    } catch (err) {
+      setError(errorMessage(err));
+      setBusy(false);
+      return;
+    }
+    // The claim itself already succeeded above; a hiccup refetching the full
+    // detail view must not be reported as a claim failure (it would read as
+    // "sometimes claiming just doesn't work" when it actually did).
+    try {
       await load();
     } catch (err) {
       setError(errorMessage(err));

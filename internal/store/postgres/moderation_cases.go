@@ -190,6 +190,11 @@ SET status = $2,
 WHERE id = $1`, request.CaseID, string(nextStatus), request.CreatedAt); err != nil {
 		return domain.ModerationCaseDetail{}, false, fmt.Errorf("finish moderation decision: %w", err)
 	}
+	if nextStatus == domain.ModerationCaseDismissed && current.Target.Type == domain.PeerTypeUser {
+		if err := clearSpamRestrictionForDismissedCaseTx(ctx, tx, current.Target.ID, request.CaseID); err != nil {
+			return domain.ModerationCaseDetail{}, false, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return domain.ModerationCaseDetail{}, false, fmt.Errorf("commit moderation decision: %w", err)
 	}
@@ -309,6 +314,11 @@ SET status = $2,
     updated_at = greatest(updated_at, $3)
 WHERE id = $1`, request.CaseID, string(nextCaseStatus), request.CreatedAt); err != nil {
 		return domain.ModerationCaseDetail{}, false, fmt.Errorf("finish moderation appeal case: %w", err)
+	}
+	if nextCaseStatus == domain.ModerationCaseDismissed && current.Target.Type == domain.PeerTypeUser {
+		if err := clearSpamRestrictionForDismissedCaseTx(ctx, tx, current.Target.ID, request.CaseID); err != nil {
+			return domain.ModerationCaseDetail{}, false, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return domain.ModerationCaseDetail{}, false, fmt.Errorf("commit moderation appeal review: %w", err)

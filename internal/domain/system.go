@@ -61,6 +61,15 @@ const (
 	// retained Premium storefront in this project.
 	GifBotUserID     int64 = 1250000017
 	GifBotAccessHash int64 = 7233282977235616768
+
+	// SpamBotUserID is the built-in @spambot: the user-facing side of the
+	// graduated anti-spam restriction system (see SpamRestriction). Message
+	// it any time to see your current restriction tier; it also proactively
+	// messages a user whenever their tier changes (escalation, admin
+	// override, or automatic decay). Mirrors real Telegram's own @spambot in
+	// spirit, entirely server-side like the other built-in bots above.
+	SpamBotUserID     int64 = 1250000021
+	SpamBotAccessHash int64 = 8562983040105300686
 )
 
 var configuredPremiumBotUserID atomic.Int64
@@ -91,7 +100,7 @@ func ValidPremiumBotUserID(id int64) bool {
 	}
 	switch id {
 	case OfficialSystemUserID, BotFatherUserID, StickersBotUserID, ChatBotUserID,
-		VerifyBotUserID, VerifierBotUserID, GifBotUserID:
+		VerifyBotUserID, VerifierBotUserID, GifBotUserID, SpamBotUserID:
 		return false
 	}
 	return true
@@ -235,6 +244,19 @@ func GifBotUser() User {
 	}
 }
 
+// SpamBotUser returns the built-in @spambot account.
+func SpamBotUser() User {
+	return User{
+		ID:             SpamBotUserID,
+		AccessHash:     SpamBotAccessHash,
+		FirstName:      "Spam Bot",
+		Username:       "spambot",
+		Verified:       true,
+		Bot:            true,
+		BotInfoVersion: 1,
+	}
+}
+
 // SystemUserByID 返回内置系统账号；非系统账号返回 ok=false。
 // 所有对 777000 的硬编码注入点统一经此函数，新增内置账号只改这里。
 func SystemUserByID(id int64) (User, bool) {
@@ -256,6 +278,8 @@ func SystemUserByID(id int64) (User, bool) {
 		return VerifierBotUser(), true
 	case GifBotUserID:
 		return GifBotUser(), true
+	case SpamBotUserID:
+		return SpamBotUser(), true
 	}
 	return User{}, false
 }
@@ -280,6 +304,7 @@ func SystemUserIDs() []int64 {
 		VerifierBotUserID,
 		PremiumBotConfiguredUserID(),
 		GifBotUserID,
+		SpamBotUserID,
 	}
 }
 

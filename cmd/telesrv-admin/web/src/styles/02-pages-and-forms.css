@@ -188,10 +188,21 @@ a.stat-tile.clickable {
 .metric,
 .summary-item {
   min-width: 0;
-  padding: 10px;
+  padding: 12px 14px;
   background: var(--panel-subtle);
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.metric {
+  box-shadow: var(--shadow-sm);
+}
+
+.metric:hover {
+  border-color: var(--brand-tint-border);
+  box-shadow: var(--shadow-float);
+  transform: translateY(-1px);
 }
 
 .status-item span,
@@ -210,6 +221,12 @@ a.stat-tile.clickable {
   overflow-wrap: anywhere;
   color: var(--text);
   font-weight: 800;
+}
+
+.metric strong {
+  color: var(--heading);
+  font-size: 17px;
+  letter-spacing: -0.01em;
 }
 
 .status-item.good,
@@ -565,18 +582,23 @@ textarea:focus {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 0 12px;
+  padding: 0 13px;
   color: var(--btn-text);
   background: var(--btn-bg);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   cursor: pointer;
+  font-weight: 600;
   white-space: nowrap;
-  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
 }
 
 .btn:hover:not(:disabled) {
   background: var(--btn-hover);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .btn:disabled {
@@ -586,13 +608,14 @@ textarea:focus {
 
 .btn.primary {
   color: #ffffff;
-  background: var(--brand);
-  border-color: var(--brand);
+  background: var(--brand-gradient);
+  border-color: transparent;
+  box-shadow: var(--shadow-brand);
 }
 
 .btn.primary:hover:not(:disabled) {
-  background: var(--brand-strong);
-  border-color: var(--brand-strong);
+  box-shadow: none;
+  filter: brightness(1.06);
 }
 
 .btn.ghost {
@@ -663,6 +686,7 @@ textarea:focus {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
 }
 
 .data-table {
@@ -687,7 +711,14 @@ textarea:focus {
   z-index: 0;
   color: var(--muted);
   background: var(--panel-strong);
+  font-size: 11px;
   font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.data-table tbody tr {
+  transition: background-color 120ms ease;
 }
 
 .data-table tbody tr:hover {

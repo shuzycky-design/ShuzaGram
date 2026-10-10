@@ -34,6 +34,7 @@ import type {
   ModerationCaseDetail,
   ModerationCaseRow,
   ModerationReport,
+  SpamRestrictionSettings,
   OfficialStarGiftListResponse,
   PremiumPlansResponse,
   StarGiftAuctionListResponse,
@@ -224,6 +225,7 @@ export const api = {
   },
   moderationCases: (params: URLSearchParams) =>
     request<{ cases: ModerationCaseRow[] }>(`/api/moderation/cases?${params.toString()}`),
+  spamRestrictionSettings: () => request<SpamRestrictionSettings>("/api/moderation/spam-restriction-settings"),
   moderationCase: (id: number) =>
     request<ModerationCaseDetail>(`/api/moderation/cases/${id}`),
   moderationReport: (id: number) =>

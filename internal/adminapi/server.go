@@ -41,6 +41,9 @@ type Config struct {
 
 type Service interface {
 	SetAccountFrozen(ctx context.Context, req admin.SetAccountFrozenRequest) (admin.CommandResult, error)
+	SetSpamRestriction(ctx context.Context, req admin.SetSpamRestrictionRequest) (admin.CommandResult, error)
+	SetSpamRestrictionSettings(ctx context.Context, req admin.SetSpamRestrictionSettingsRequest) (admin.CommandResult, error)
+	InjectTestReports(ctx context.Context, req admin.InjectTestReportsRequest) (admin.CommandResult, error)
 	GrantPremium(ctx context.Context, req admin.GrantPremiumRequest) (admin.CommandResult, error)
 	GrantStars(ctx context.Context, req admin.GrantStarsRequest) (admin.CommandResult, error)
 	SetVerified(ctx context.Context, req admin.SetVerifiedRequest) (admin.CommandResult, error)
@@ -228,6 +231,9 @@ func (s *Server) routes() http.Handler {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 	mux.HandleFunc("POST /v1/accounts/set-frozen", s.authenticated(s.handleSetAccountFrozen))
+	mux.HandleFunc("POST /v1/accounts/set-spam-restriction", s.authenticated(s.handleSetSpamRestriction))
+	mux.HandleFunc("POST /v1/moderation/set-spam-restriction-settings", s.authenticated(s.handleSetSpamRestrictionSettings))
+	mux.HandleFunc("POST /v1/moderation/inject-test-reports", s.authenticated(s.handleInjectTestReports))
 	mux.HandleFunc("POST /v1/accounts/grant-premium", s.authorized(PermissionPremiumManage, s.handleGrantPremium))
 	mux.HandleFunc("POST /v1/accounts/refund-premium", s.authorized(PermissionPremiumManage, s.handleRefundPremium))
 	mux.HandleFunc("GET /v1/premium/plans", s.authorized(PermissionPremiumManage, s.handlePremiumPlans))
@@ -363,6 +369,33 @@ func (s *Server) handleSetAccountFrozen(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	result, err := s.svc.SetAccountFrozen(r.Context(), req)
+	writeCommandResult(w, result, err)
+}
+
+func (s *Server) handleSetSpamRestriction(w http.ResponseWriter, r *http.Request) {
+	var req admin.SetSpamRestrictionRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	result, err := s.svc.SetSpamRestriction(r.Context(), req)
+	writeCommandResult(w, result, err)
+}
+
+func (s *Server) handleSetSpamRestrictionSettings(w http.ResponseWriter, r *http.Request) {
+	var req admin.SetSpamRestrictionSettingsRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	result, err := s.svc.SetSpamRestrictionSettings(r.Context(), req)
+	writeCommandResult(w, result, err)
+}
+
+func (s *Server) handleInjectTestReports(w http.ResponseWriter, r *http.Request) {
+	var req admin.InjectTestReportsRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	result, err := s.svc.InjectTestReports(r.Context(), req)
 	writeCommandResult(w, result, err)
 }
 
